@@ -60,10 +60,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Check PaymentStatus is PLATFORM_HOLD (brand paid, in escrow)
-    if (collab.content.PaymentStatus !== PaymentStatus.PLATFORM_HOLD) {
+    // Check PaymentStatus is BRAND_PAID or PLATFORM_HOLD (brand paid, in escrow)
+    if (
+      collab.content.PaymentStatus !== PaymentStatus.BRAND_PAID &&
+      collab.content.PaymentStatus !== PaymentStatus.PLATFORM_HOLD
+    ) {
       return NextResponse.json(
-        { error: `Upload locked. Payment status: ${collab.content.PaymentStatus}. Expected: ${PaymentStatus.PLATFORM_HOLD}` },
+        {
+          error: `Upload locked. Payment status: ${collab.content.PaymentStatus}. Expected: ${PaymentStatus.BRAND_PAID} or ${PaymentStatus.PLATFORM_HOLD}`,
+        },
         { status: 403 }
       )
     }

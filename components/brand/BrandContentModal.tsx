@@ -15,6 +15,7 @@ type Props = {
 export default function BrandContentModal({ collabId, isOpen, onClose, onActionComplete }: Props) {
   const [loading, setLoading] = useState(false)
   const [contentStatus, setContentStatus] = useState<string | null>(null)
+  const [collabStatus, setCollabStatus] = useState<string | null>(null)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null)
   const [pkgPrice, setPkgPrice] = useState<string | null>(null)
@@ -22,6 +23,8 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pkgTitle, setPkgTitle] = useState<string | null>(null)
+
+  const paymentCompleted = paymentStatus === "BRAND_PAID" || paymentStatus === "PLATFORM_HOLD" || paymentStatus === "CREATOR_PAID"
 
   useEffect(() => {
     if (isOpen && collabId) fetchContent()
@@ -37,8 +40,9 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
       if (!res.ok) throw new Error(data?.error || "Failed to load")
 
       setContentStatus(data.contentStatus)
+      setCollabStatus(data.collabStatus || null)
       setUploadedFiles(data.uploadedFiles || [])
-      setPaymentStatus(data.paymentStatus || null)
+      setPaymentStatus(data.paymentStatus || data.paymentState || null)
       setPkgTitle(data.package?.title || null)
       setPkgPrice(data.package?.price || null)
     } catch (err) {
@@ -110,12 +114,11 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
       // Fetch updated payment status from server to confirm
       const statusRes = await fetch(`/api/brand/content/${collabId}`)
       if (statusRes.ok) {
-        const data = await statusRes.json()
-        setPaymentStatus(data.paymentState || "COMPLETED")
-      } else {
-        setPaymentStatus("COMPLETED")
-      }
-      
+          const data = await statusRes.json()
+          setPaymentStatus(data.paymentStatus || data.paymentState || "COMPLETED")
+        } else {
+          setPaymentStatus("COMPLETED")
+        }
       setSuccess("Payment completed successfully. Creator can now upload content.")
       onActionComplete?.()
     } catch (err) {
@@ -144,9 +147,19 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
             <div className="p-6 text-slate-400">Loading...</div>
           ) : (
             <div className="space-y-4">
-              <div>
-                <p className="text-sm text-slate-400">Status</p>
-                <p className="font-semibold text-white">{contentStatus}</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-sm text-slate-400">Collab status</p>
+                  <p className="font-semibold text-white">{collabStatus || "UNKNOWN"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-400">Payment status</p>
+                  <p className="font-semibold text-white">{paymentStatus || "UNPAID"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-400">Content status</p>
+                  <p className="font-semibold text-white">{contentStatus}</p>
+                </div>
               </div>
 
               <div>
@@ -165,7 +178,7 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
                 </div>
               </div>
 
-              {paymentStatus !== "COMPLETED" && (
+              {!paymentCompleted && (
                 <>
                   {error && <div className="rounded-3xl border border-rose-500/30 bg-rose-500/10 p-4 mb-4">
                     <p className="text-sm text-rose-300">{error}</p>
@@ -185,8 +198,15 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
                 </>
               )}
 
+              {paymentCompleted && (
+                <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                  <p className="text-sm text-emerald-200 font-semibold">Thanks for your payment.</p>
+                  <p className="mt-2 text-sm text-slate-200">You will be notified once the creator uploads their drafts.</p>
+                </div>
+              )}
+
               {uploadedFiles.length > 0 ? (
-                paymentStatus === "COMPLETED" ? (
+                paymentCompleted ? (
                   contentStatus === "APPROVED" ? (
                     <div className="rounded-3xl bg-emerald-500/10 border border-emerald-500/30 p-4">
                       <p className="text-sm text-emerald-300">✓ This submission has been approved.</p>
@@ -207,7 +227,9 @@ export default function BrandContentModal({ collabId, isOpen, onClose, onActionC
                       </div>
                     </>
                   )
-                ) : null
+                ) : (
+                  <div className="text-sm text-slate-500">Waiting for creator to submit their draft.</div>
+                )
               ) : (
                 <div className="text-sm text-slate-500">Waiting for creator to submit their draft.</div>
               )}

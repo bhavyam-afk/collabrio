@@ -34,6 +34,7 @@ type DashboardResponse = {
   cancelledCollaborations: CollaborationItem[]
   completedCollaborations: CollaborationItem[]
   counts: DashboardCounts
+  totalEarned: number
 }
 
 type UploadedFile = {
@@ -56,6 +57,7 @@ export default function Page() {
   const [cancelledCollaborations, setCancelledCollaborations] = useState<CollaborationItem[]>([])
   const [completedCollaborations, setCompletedCollaborations] = useState<CollaborationItem[]>([])
   const [counts, setCounts] = useState<DashboardCounts>({ pendingRequests: 0, acceptedCollaborations: 0, cancelledCollaborations: 0, completedCollaborations: 0 })
+  const [totalEarned, setTotalEarned] = useState(0)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -77,8 +79,9 @@ export default function Page() {
       { label: "Active collabs", value: counts.acceptedCollaborations, description: "Collaborations you have accepted and are working on." },
       { label: "Cancelled collabs", value: counts.cancelledCollaborations, description: "Requests withdrawn or collaborations cancelled by brands." },
       { label: "Completed collabs", value: counts.completedCollaborations, description: "Collaborations successfully completed." },
+      { label: "Total money earned", value: `₹${totalEarned.toLocaleString()}`, description: "Total earnings from all completed collaborations.", isEarnings: true },
     ],
-    [counts]
+    [counts, totalEarned]
   )
 
   useEffect(() => {
@@ -103,6 +106,7 @@ export default function Page() {
       setCancelledCollaborations(data.cancelledCollaborations)
       setCompletedCollaborations(data.completedCollaborations)
       setCounts(data.counts)
+      setTotalEarned(data.totalEarned)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard")
     } finally {
@@ -198,11 +202,18 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-3 lg:grid-cols-5">
           {statCards.map((card) => (
-            <div key={card.label} className="rounded-4xl border border-white/10 bg-slate-900/80 p-6 shadow-lg shadow-black/10">
+            <div 
+              key={card.label} 
+              className={`rounded-4xl border p-6 shadow-lg transition ${
+                (card as any).isEarnings 
+                  ? "border-cyan-500/30 bg-linear-to-br from-cyan-500/10 to-slate-900/80 shadow-cyan-500/10 lg:col-span-2"
+                  : "border-white/10 bg-slate-900/80 shadow-black/10"
+              }`}
+            >
               <p className="text-sm uppercase tracking-[0.35em] text-slate-500">{card.label}</p>
-              <p className="mt-4 text-4xl font-semibold text-white">{card.value}</p>
+              <p className={`mt-4 text-4xl font-semibold ${(card as any).isEarnings ? "text-cyan-400" : "text-white"}`}>{card.value}</p>
               <p className="mt-3 text-sm leading-6 text-slate-400">{card.description}</p>
             </div>
           ))}

@@ -7,11 +7,14 @@ import type { CollabStatus } from "@prisma/client"
 const VALID_STATUS = "ACTIVE" as CollabStatus
 
 async function getCreatorProfile(userId: string) {
-  return prisma.creatorProfile.findUnique({ where: { userId } })
+  return prisma.creatorProfile.findUnique({
+    where: { userId },
+    select: { id: true, userId: true },
+  })
 }
 
 type ValidationResult =
-  | { status: 200; creatorProfile: { id: string } }
+  | { status: 200; creatorProfile: { id: string; userId: string } }
   | { status: 401 | 403 | 404; body: { error: string } }
 
 async function validateCreatorSession(): Promise<ValidationResult> {
@@ -32,7 +35,7 @@ async function validateCreatorSession(): Promise<ValidationResult> {
     return { status: 404, body: { error: "Creator profile not found" } }
   }
 
-  return { status: 200, creatorProfile: { id: creatorProfile.id } }
+  return { status: 200, creatorProfile }
 }
 
 const serializeCollaboration = (collab: {
@@ -79,7 +82,7 @@ export async function GET(req: NextRequest) {
 
   const creatorProfile = validation.creatorProfile
 
-  const [pendingRequests, activeCollaborations, cancelledCollaborations, completedCollaborations] = await Promise.all([
+  const [pendingRequests, activeCollaborations, cancelledCollaborations, completedCollaborations, wallet] = await Promise.all([
     prisma.collaboration.findMany({
       where: { creatorId: creatorProfile.id, collabStatus: "PENDING" },
       orderBy: { createdAt: "desc" },
@@ -144,6 +147,10 @@ export async function GET(req: NextRequest) {
         },
       },
     }),
+    prisma.wallet.findUnique({
+      where: { userId: creatorProfile.userId },
+      select: { totalEarned: true },
+    }),
   ])
 
   return NextResponse.json({
@@ -157,6 +164,7 @@ export async function GET(req: NextRequest) {
       cancelledCollaborations: cancelledCollaborations.length,
       completedCollaborations: completedCollaborations.length,
     },
+    totalEarned: wallet?.totalEarned ? Number(wallet.totalEarned) : 0,
   })
 }
 

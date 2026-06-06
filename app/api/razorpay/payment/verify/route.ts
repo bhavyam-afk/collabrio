@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import crypto from "crypto"
 import prisma from "@/clients/prisma"
 import { TransactionType, TransactionStatus, WalletType, CollabStatus, PaymentStatus } from "@prisma/client"
+import * as bcrypt from "bcryptjs"
 
 export async function POST(req: Request) {
   try {
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
     }
 
     const brandWallet = collab.brand?.user?.wallet
-    const platformWallet = await prisma.wallet.findFirst({
+    let platformWallet = await prisma.wallet.findFirst({
       where: { walletType: WalletType.PLATFORM },
     })
 
@@ -120,12 +121,39 @@ export async function POST(req: Request) {
       )
     }
 
+    // Create platform wallet if it doesn't exist
     if (!platformWallet) {
-      console.error("[VERIFY] Platform wallet missing")
-      return NextResponse.json(
-        { error: "Platform wallet missing" },
-        { status: 500 }
-      )
+      console.log("[VERIFY] Platform wallet not found, creating...")
+      
+      // Find or create platform system user
+      let platformUser = await prisma.user.findFirst({
+        where: { email: "platform@collabrio.local" },
+      })
+
+      if (!platformUser) {
+        platformUser = await prisma.user.create({
+          data: {
+            email: "platform@collabrio.local",
+            username: "collabrio_platform",
+            passwordHash: await bcrypt.hash("PlatformAdmin@2026", 10),
+            userType: "BRAND",
+            onboarding: "COMPLETE",
+          },
+        })
+      }
+
+      platformWallet = await prisma.wallet.create({
+        data: {
+          userId: platformUser.id,
+          walletType: WalletType.PLATFORM,
+          currentBalance: 0,
+          pendingBalance: 0,
+          totalEarned: 0,
+          totalSpent: 0,
+        },
+      })
+
+      console.log("[VERIFY] Platform wallet created")
     }
 
     const totalAmount = Number(collab.package.price)
@@ -199,14 +227,14 @@ export async function POST(req: Request) {
           collabId,
           packageId: collab.packageId,
           contentStatus: "NOT_SUBMITTED",
-          PaymentStatus: PaymentStatus.PLATFORM_HOLD,
+          PaymentStatus: PaymentStatus.BRAND_PAID,
         },
         update: {
-          PaymentStatus: PaymentStatus.PLATFORM_HOLD,
+          PaymentStatus: PaymentStatus.BRAND_PAID,
         },
       })
 
-      console.log("[VERIFY] PackageCollaboration PaymentStatus set to PLATFORM_HOLD")
+      console.log("[VERIFY] PackageCollaboration PaymentStatus set to BRAND_PAID")
     })
 
     console.log(`[VERIFY] Payment verified successfully for collab ${collabId}, payment_id: ${razorpay_payment_id}`)

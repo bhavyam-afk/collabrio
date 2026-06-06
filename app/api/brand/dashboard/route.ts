@@ -39,6 +39,7 @@ async function validateBrandSession(): Promise<ValidationResult> {
 type BrandCollaboration = {
   id: string
   collabStatus: CollabStatus
+  PaymentStatus: PaymentStatus
   createdAt: Date
   updatedAt: Date
   package: {
@@ -61,6 +62,7 @@ type BrandCollaboration = {
 const serializeCollaboration = (collab: BrandCollaboration) => ({
   id: collab.id,
   status: collab.collabStatus,
+  paymentStatus: collab.PaymentStatus,
   createdAt: collab.createdAt.toISOString(),
   updatedAt: collab.updatedAt.toISOString(),
   package: {
@@ -167,6 +169,7 @@ export async function PATCH(req: NextRequest) {
       content: true,
       package: true,
       brand: { include: { user: { include: { wallet: true } } } },
+      creator: { include: { user: { include: { wallet: true } } } },
     },
   })
 
@@ -184,7 +187,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Cannot cancel if creator has already been paid
-    if (current.content?.PaymentStatus === PaymentStatus.CREATOR_PAID) {
+    if (
+      current.PaymentStatus === PaymentStatus.CREATOR_PAID ||
+      current.content?.PaymentStatus === PaymentStatus.CREATOR_PAID
+    ) {
       return NextResponse.json({
         error: "Cannot cancel - creator has already been paid. Contact support for dispute.",
         status: 400,
@@ -192,17 +198,24 @@ export async function PATCH(req: NextRequest) {
     }
 
     // If payment was made, handle refund
-    if (current.content?.PaymentStatus === PaymentStatus.PLATFORM_HOLD) {
+    if (
+      current.PaymentStatus === PaymentStatus.PLATFORM_HOLD ||
+      current.content?.PaymentStatus === PaymentStatus.PLATFORM_HOLD
+    ) {
       const brandWallet = current.brand?.user?.wallet
       const platformWallet = await prisma.wallet.findFirst({
         where: { walletType: WalletType.PLATFORM },
       })
+      const creatorWallet = current.creator?.user?.wallet
 
       if (!brandWallet || !platformWallet) {
         return NextResponse.json({ error: "Wallet configuration error" }, { status: 500 })
       }
 
       const refundAmount = Number(current.package?.price || 0)
+      const draftSubmitted = current.content?.contentStatus === "SUBMITTED" || current.content?.contentStatus === "IMPROVEMENT_REQUESTED"
+      const creatorCompensation = draftSubmitted ? Math.round(refundAmount * 0.5 * 100) / 100 : 0
+      const brandRefund = Math.round((refundAmount - creatorCompensation) * 100) / 100
 
       // Process refund in transaction
       await prisma.$transaction(async (tx) => {
@@ -230,12 +243,41 @@ export async function PATCH(req: NextRequest) {
           },
         })
 
+        // Credit brand wallet with the refund amount
+        await tx.wallet.update({
+          where: { id: brandWallet.id },
+          data: {
+            currentBalance: { increment: brandRefund },
+          },
+        })
+
+        if (draftSubmitted && creatorCompensation > 0 && creatorWallet) {
+          await tx.wallet.update({
+            where: { id: creatorWallet.id },
+            data: {
+              currentBalance: { increment: creatorCompensation },
+              totalEarned: { increment: creatorCompensation },
+            },
+          })
+
+          await tx.transaction.create({
+            data: {
+              type: TransactionType.CREATOR_EARNING,
+              status: TransactionStatus.INWALLET,
+              amount: creatorCompensation,
+              fromWalletId: platformWallet.id,
+              toWalletId: creatorWallet.id,
+              collabId,
+            },
+          })
+        }
+
         // Create refund transaction
         await tx.transaction.create({
           data: {
             type: TransactionType.REFUND,
             status: TransactionStatus.COMPLETED,
-            amount: refundAmount,
+            amount: brandRefund,
             fromWalletId: platformWallet.id,
             toWalletId: brandWallet.id,
             collabId,

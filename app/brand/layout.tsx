@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { signOut } from "next-auth/react"
 import React from "react"
 
 const tabs = [
@@ -12,6 +13,20 @@ const tabs = [
 
 const BrandLayout = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("sessionToken")
+      localStorage.removeItem("authToken")
+      sessionStorage.removeItem("sessionToken")
+      document.cookie = "next-auth.session-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      document.cookie = "next-auth.csrf-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    }
+
+    await signOut({ callbackUrl: "/api/auth/signin" })
+    router.push("/")
+  }
 
   return (
     <div className="min-h-screen bg-[#050816] text-white">
@@ -36,7 +51,15 @@ const BrandLayout = ({ children }: { children: React.ReactNode }) => {
             })}
           </nav>
 
-          <div className="w-24" />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-full border border-cyan-500/30 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-500/15"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 

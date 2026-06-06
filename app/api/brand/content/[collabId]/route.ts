@@ -4,6 +4,7 @@ import prisma from "@/clients/prisma"
 import { authOptions } from "../../../auth/authOptions"
 import { getPresignedUrl } from "@/clients/uploadToS3"
 import { TransactionStatus, TransactionType, WalletType, PaymentStatus } from "@prisma/client"
+import * as bcrypt from "bcryptjs"
 
 export async function GET(
   req: NextRequest,
@@ -75,9 +76,11 @@ export async function GET(
         price: String(collaboration.package.price),
       },
       contentStatus: computedStatus,
-      paymentState: collaboration.content?.PaymentStatus || "UNPAID",
+      paymentStatus: collaboration.PaymentStatus,
+      paymentState: collaboration.PaymentStatus,
       uploadedFiles: validFiles,
       brandFeedback: collaboration.content?.brandFeedback || null,
+      revisionCount: collaboration.content?.revisionCount || 0,
       transactionStatus: paymentStatus,
     })
   } catch (error) {
@@ -147,7 +150,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ colla
       const creatorShare = packagePrice - platformFee
 
       const creatorWallet = collaboration.creator?.user?.wallet
-      const platformWallet = await prisma.wallet.findFirst({
+      let platformWallet = await prisma.wallet.findFirst({
         where: { walletType: WalletType.PLATFORM },
       })
 
@@ -155,8 +158,35 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ colla
         return NextResponse.json({ error: "Creator wallet not found" }, { status: 400 })
       }
 
+      // Create platform wallet if it doesn't exist
       if (!platformWallet) {
-        return NextResponse.json({ error: "Platform wallet missing" }, { status: 500 })
+        // Find or create platform system user
+        let platformUser = await prisma.user.findFirst({
+          where: { email: "platform@collabrio.local" },
+        })
+
+        if (!platformUser) {
+          platformUser = await prisma.user.create({
+            data: {
+              email: "platform@collabrio.local",
+              username: "collabrio_platform",
+              passwordHash: await bcrypt.hash("PlatformAdmin@2026", 10),
+              userType: "BRAND",
+              onboarding: "COMPLETE",
+            },
+          })
+        }
+
+        platformWallet = await prisma.wallet.create({
+          data: {
+            userId: platformUser.id,
+            walletType: WalletType.PLATFORM,
+            currentBalance: 0,
+            pendingBalance: 0,
+            totalEarned: 0,
+            totalSpent: 0,
+          },
+        })
       }
 
       // Transaction: release escrow and distribute earnings
@@ -260,7 +290,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ colla
         contentStatus: "IMPROVEMENT_REQUESTED",
         brandFeedback: feedback || null,
         revisionCount: newRevisionCount,
-        // PaymentStatus stays PLATFORM_HOLD - escrow is still locked
+        PaymentStatus: PaymentStatus.PLATFORM_HOLD, // money still locked in escrow
       },
     })
 

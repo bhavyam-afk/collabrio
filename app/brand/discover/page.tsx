@@ -24,7 +24,7 @@ export default function DiscoverPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [requesting, setRequesting] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [requestedPackageIds, setRequestedPackageIds] = useState<string[]>([])
 
   const filteredPackages = packages.filter((pkg) => {
     const query = searchQuery.trim().toLowerCase()
@@ -41,7 +41,6 @@ export default function DiscoverPage() {
   async function fetchPackages() {
     setLoading(true)
     setError(null)
-    setSuccess(null)
 
     try {
       const response = await fetch("/api/brand/discover")
@@ -60,7 +59,6 @@ export default function DiscoverPage() {
   async function sendRequest(packageId: string) {
     setRequesting(packageId)
     setError(null)
-    setSuccess(null)
 
     try {
       const response = await fetch("/api/brand/discover", {
@@ -72,7 +70,7 @@ export default function DiscoverPage() {
       if (!response.ok) {
         throw new Error(data?.error || "Unable to send request")
       }
-      setSuccess("Request sent successfully.")
+      setRequestedPackageIds((prev) => [...prev, packageId])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send request")
     } finally {
@@ -112,12 +110,6 @@ export default function DiscoverPage() {
           </div>
         ) : null}
 
-        {success ? (
-          <div className="mb-6 rounded-4xl border border-emerald-400/10 bg-emerald-500/10 p-6 text-sm text-emerald-200">
-            {success}
-          </div>
-        ) : null}
-
         {loading ? (
           <div className="rounded-4xl border border-dashed border-slate-700/80 bg-slate-950/60 p-12 text-center text-slate-400">
             Loading packages...
@@ -132,43 +124,52 @@ export default function DiscoverPage() {
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredPackages.map((pkg) => (
-              <article key={pkg.id} className="rounded-4xl border border-white/10 bg-slate-900/90 p-6 shadow-lg shadow-black/10">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-cyan-400/80">{pkg.mediaType}</p>
-                    <h2 className="mt-3 text-xl font-semibold text-white">{pkg.title}</h2>
-                    <p className="mt-2 text-sm text-slate-400">{pkg.description || "No description provided."}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-semibold text-white">₹{Number(pkg.price).toLocaleString()}</p>
-                    <p className="text-sm text-slate-500">{pkg.deliveryTimeDays} days</p>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span className="rounded-2xl bg-slate-800 px-3 py-1">{pkg.creator.username}</span>
-                  {pkg.creator.niche ? <span className="rounded-2xl bg-slate-800 px-3 py-1">{pkg.creator.niche}</span> : null}
-                </div>
-
-                <div className="mt-5 space-y-3 text-sm text-slate-300">
-                  {pkg.deliverables.map((item, index) => (
-                    <div key={index} className="rounded-3xl bg-slate-950/70 px-3 py-2">
-                      {item}
+            {filteredPackages.map((pkg) => {
+              const hasRequested = requestedPackageIds.includes(pkg.id)
+              return (
+                <article key={pkg.id} className="rounded-4xl border border-white/10 bg-slate-900/90 p-6 shadow-lg shadow-black/10">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.35em] text-cyan-400/80">{pkg.mediaType}</p>
+                      <h2 className="mt-3 text-xl font-semibold text-white">{pkg.title}</h2>
+                      <p className="mt-2 text-sm text-slate-400">{pkg.description || "No description provided."}</p>
                     </div>
-                  ))}
-                </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-semibold text-white">₹{Number(pkg.price).toLocaleString()}</p>
+                      <p className="text-sm text-slate-500">{pkg.deliveryTimeDays} days</p>
+                    </div>
+                  </div>
 
-                <button
-                  type="button"
-                  disabled={requesting === pkg.id}
-                  onClick={() => sendRequest(pkg.id)}
-                  className="mt-6 inline-flex w-full items-center justify-center rounded-3xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {requesting === pkg.id ? "Sending request..." : "Send request"}
-                </button>
-              </article>
-            ))}
+                  <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                    <span className="rounded-2xl bg-slate-800 px-3 py-1">{pkg.creator.username}</span>
+                    {pkg.creator.niche ? <span className="rounded-2xl bg-slate-800 px-3 py-1">{pkg.creator.niche}</span> : null}
+                  </div>
+
+                  <div className="mt-5 space-y-3 text-sm text-slate-300">
+                    {pkg.deliverables.map((item, index) => (
+                      <div key={index} className="rounded-3xl bg-slate-950/70 px-3 py-2">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+
+                  {hasRequested ? (
+                    <div className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                      You have already sent a request.
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    disabled={requesting === pkg.id || hasRequested}
+                    onClick={() => sendRequest(pkg.id)}
+                    className="mt-4 inline-flex w-full items-center justify-center rounded-3xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {requesting === pkg.id ? "Sending request..." : hasRequested ? "Request sent" : "Send request"}
+                  </button>
+                </article>
+              )
+            })}
           </div>
         )}
       </div>
