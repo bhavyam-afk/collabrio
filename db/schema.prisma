@@ -1,0 +1,377 @@
+// Collabrio — Final MVP Schema
+// Last updated: June 2026
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ENUMS 
+
+enum UserType {
+  CREATOR
+  BRAND
+}
+
+enum OnboardingStatus {
+  PENDING
+  COMPLETE
+}
+
+enum PackageStatus {
+  ACTIVE
+  DRAFT
+  DELETED
+}
+
+enum CollabStatus {
+  PENDING    // Brand sent invite, creator hasn't responded
+  ACTIVE     // Creator accepted, work in progress
+  COMPLETED  // Draft approved, payment released
+  CANCELLED
+}
+
+enum ContentStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  IMPROVEMENT_REQUESTED
+  APPROVED
+  REJECTED
+}
+
+enum WalletType {
+  CREATOR
+  BRAND
+  PLATFORM
+}
+
+enum TransactionType {
+  BRAND_PAYMENT    // Brand pays platform (external Razorpay charge)
+  CREATOR_EARNING  // Platform credits creator wallet after approval
+  PLATFORM_FEE     // Platform takes its cut
+  PAYOUT           // Creator withdraws to bank
+  REFUND           // Brand gets money back on cancellation
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  INWALLET  // Credited to wallet but not yet withdrawn
+}
+
+enum PaymentStatus {
+  UNPAID
+  BRAND_PAID
+  PLATFORM_HOLD
+  CREATOR_PAID
+  REFUNDED
+}
+
+enum CreatorCategory {
+  NANO
+  MICRO
+  MACRO
+  CELEB
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  UNAVAILABLE
+  TENTATIVE
+}
+
+enum SubscriptionPlan {
+  BASIC
+  PRO
+  BUSINESS
+}
+
+enum NotificationType {
+  COLLAB_INVITE
+  DRAFT_SUBMITTED
+  DRAFT_APPROVED
+  IMPROVEMENT_REQUESTED
+  PAYMENT_RECEIVED
+  PAYOUT_PROCESSED
+}
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
+  passwordHash String
+  userType     UserType
+  onboarding   OnboardingStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  creatorProfile CreatorProfile?
+  brandProfile   BrandProfile?
+  wallet         Wallet?
+  notifications  Notification[]
+}
+
+// ─── CREATOR ──────────────────────────────────────────────────────────────────
+
+model CreatorProfile {
+  id            String          @id @default(cuid())
+  userId        String          @unique
+  user          User            @relation(fields: [userId], references: [id])
+
+  bio           String?         @db.Text
+  location      String?
+  niche         String?
+  profilePicUrl String?
+  introClipUrl  String?
+  nicheTags     String[]
+  portfolio     Json?           // [{ "title": "...", "url": "..." }]
+  mlScore       Float?
+  category      CreatorCategory? 
+  platformLinks Json?           // [{ "platform": "instagram", "url": "..." }]
+  followerCount Int             @default(0)
+
+  packages           Package[]
+  collaborations     Collaboration[]
+  availabilities     CreatorAvailability[]
+  socialAccounts     CreatorSocialAccount[]
+  rawSocialSnapshots CreatorSocialRawSnapshot[]
+  dailyAnalytics     CreatorDailyAnalytics[]
+
+  @@index([userId])
+}
+
+// ─── BRAND ────────────────────────────────────────────────────────────────────
+
+model BrandProfile {
+  id           String           @id @default(cuid())
+  userId       String           @unique
+  user         User             @relation(fields: [userId], references: [id])
+
+  logoUrl      String?
+  bio          String?          @db.Text
+  industryTags String[]
+  socialLinks  Json?            // [{ "platform": "website", "url": "..." }]
+  plan         SubscriptionPlan @default(BASIC)
+
+  collaborations Collaboration[]
+  subscription   BrandSubscription?
+
+  @@index([userId])
+}
+
+// ─── PACKAGES ─────────────────────────────────────────────────────────────────
+
+model Package {
+  id               String        @id @default(cuid())
+  creatorId        String
+  creator          CreatorProfile @relation(fields: [creatorId], references: [id])
+
+  title            String
+  description      String?       @db.Text
+  thumbnailUrl     String?
+  mediaType        String        // "Instagram Reel", "YouTube Short", etc.
+  deliverables     String[]      // ["1 Reel", "2 Stories"]
+  deliveryTimeDays Int
+  price            Decimal       @db.Decimal(10, 2)
+  packageStatus    PackageStatus @default(DRAFT)
+
+  collaborations         Collaboration[]
+  packageCollaborations  PackageCollaboration[]
+
+  @@index([creatorId])
+}
+
+// ─── COLLABORATION (core state machine) ───────────────────────────────────────
+
+model Collaboration {
+  id           String       @id @default(cuid())
+  creatorId    String
+  brandId      String
+  packageId    String
+  collabStatus CollabStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  PaymentStatus PaymentStatus @default(UNPAID)
+
+  creator  CreatorProfile        @relation(fields: [creatorId], references: [id])
+  brand    BrandProfile          @relation(fields: [brandId], references: [id])
+  package  Package               @relation(fields: [packageId], references: [id])
+  content  PackageCollaboration?
+
+  @@index([creatorId])
+  @@index([brandId])
+  @@index([packageId])
+}
+
+model PackageCollaboration {
+  id                  String        @id @default(cuid())
+  collabId            String        @unique
+  packageId           String
+  contentStatus       ContentStatus @default(NOT_SUBMITTED)
+  contentDraft        Json?         // [{ "url": "...", "type": "video"|"image" }]
+  revisionCount       Int           @default(0)  // bump on each IMPROVEMENT_REQUESTED
+  draftSubmittedAt    DateTime?
+  PaymentStatus       PaymentStatus  @default(UNPAID)
+  brandFeedback       String?
+  draftApprovedAt     DateTime?
+  publishedContentUrl String?
+  publishedAt         DateTime?
+
+  collaboration Collaboration @relation(fields: [collabId], references: [id])
+  package       Package       @relation(fields: [packageId], references: [id])
+}
+
+// ─── FINANCIAL ────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id         String     @id @default(cuid())
+  userId     String     @unique
+  walletType WalletType
+
+  currentBalance Decimal @default(0) @db.Decimal(12, 2)
+  pendingBalance Decimal @default(0) @db.Decimal(12, 2)
+  totalEarned    Decimal @default(0) @db.Decimal(12, 2)
+  totalSpent     Decimal @default(0) @db.Decimal(12, 2)
+
+  user User @relation(fields: [userId], references: [id])
+
+  outgoingTransactions Transaction[] @relation("FromWallet")
+  incomingTransactions Transaction[] @relation("ToWallet")
+
+  @@index([userId])
+}
+
+model Transaction {
+  id String @id @default(cuid())
+
+  fromWalletId      String?
+  toWalletId        String?
+  amount            Decimal           @db.Decimal(12, 2)
+  type              TransactionType
+  status            TransactionStatus @default(PENDING)
+  collabId          String?
+  externalPaymentId String?           // Razorpay payment_id
+  externalOrderId   String?           // Razorpay order_id
+  provider          String?           // "RAZORPAY"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fromWallet Wallet? @relation(name: "FromWallet", fields: [fromWalletId], references: [id])
+  toWallet   Wallet? @relation(name: "ToWallet",   fields: [toWalletId],   references: [id])
+
+  @@index([fromWalletId])
+  @@index([toWalletId])
+  @@index([collabId])
+  @@index([externalPaymentId])  // fast idempotency checks on webhook
+}
+
+// ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
+
+model BrandSubscription {
+  id      String       @id @default(cuid())
+  brandId String       @unique
+  brand   BrandProfile @relation(fields: [brandId], references: [id])
+
+  plan               SubscriptionPlan @default(BASIC)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+
+  razorpaySubscriptionId String?
+  razorpayPlanId         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandId])
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id])
+  type     NotificationType
+  message  String
+  read     Boolean          @default(false)
+  collabId String?
+  createdAt DateTime        @default(now())
+
+  @@index([userId, read])
+}
+
+// ─── CREATOR INSTAGRAM / ANALYTICS ───────────────────────────────────────────
+
+model CreatorSocialAccount {
+  id             String    @id @default(cuid())
+  creatorId      String
+  platform       String    // "INSTAGRAM"
+  accessToken    String
+  tokenExpiresAt DateTime?
+  igAccountId    String?
+  pageId         String?
+  connected      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+
+  @@unique([creatorId, platform])
+}
+
+model CreatorSocialRawSnapshot {
+  id        String   @id @default(cuid())
+  creatorId String
+  platform  String
+  rawData   Json     // Full Meta API response — never transform, store raw
+  fetchedAt DateTime @default(now())
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+
+  @@index([creatorId, fetchedAt])
+}
+
+model CreatorDailyAnalytics {
+  id           String   @id @default(cuid())
+  creatorId    String
+  date         DateTime
+
+  followers    Int
+  reach        Int
+  impressions  Int
+  engagements  Int
+  likes        Int
+  comments     Int
+  shares       Int
+  saves        Int
+  replies      Int
+  profileViews Int
+
+  createdAt DateTime @default(now())
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+
+  @@unique([creatorId, date])
+  @@index([creatorId, date])
+}
+
+model CreatorAvailability {
+  id        String             @id @default(cuid())
+  creatorId String
+  creator   CreatorProfile     @relation(fields: [creatorId], references: [id])
+  date      DateTime
+  status    AvailabilityStatus
+  reason    String?
+  createdAt DateTime           @default(now())
+
+  @@unique([creatorId, date])
+  @@index([creatorId, date])
+}
