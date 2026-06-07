@@ -5,10 +5,7 @@ import prisma from "@/clients/prisma"
 import { authOptions } from "../../../auth/authOptions"
 import { TransactionType, TransactionStatus, CollabStatus } from "@prisma/client"
 
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID!,
-    key_secret: process.env.RAZORPAY_KEY_SECRET!,
-})
+
 
 async function validateBrandSession() {
     const session = await getServerSession(authOptions)
@@ -33,6 +30,34 @@ async function validateBrandSession() {
 
 export async function POST(req: Request) {
     try {
+
+        if (
+            !process.env.RAZORPAY_KEY_ID ||
+            !process.env.RAZORPAY_KEY_SECRET
+        ) {
+            console.error(
+                "Missing Razorpay env vars",
+                {
+                    hasKeyId: !!process.env.RAZORPAY_KEY_ID,
+                    hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET,
+                }
+            )
+
+            return NextResponse.json(
+                {
+                    error: "Missing Razorpay environment variables",
+                },
+                {
+                    status: 500,
+                }
+            )
+        }
+
+        const razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET,
+        })
+
         const validation = await validateBrandSession()
         if (validation.status !== 200) {
             return NextResponse.json(validation.body, { status: validation.status })
