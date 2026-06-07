@@ -44,7 +44,7 @@ Use these sample credentials to log in and exercise the brand and creator flows.
   Password: BrandPass123!
 
 ### Creator accounts
-
+ 
 - Email: creator1@example.com
   Password: CreatorPass123!
 - Email: creator2@example.com
