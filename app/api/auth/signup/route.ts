@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { z } from "zod"
 import prisma from "@/clients/prisma"
 import { uploadToS3 } from "@/clients/uploadToS3"
+import { Prisma } from "@prisma/client";
 
 const schema = z.object({
   email:    z.string().email(),
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
 
     const passwordHash = await bcrypt.hash(password, 12)
 
-    const user = await prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const newUser = await tx.user.create({
         data: {
           email,
