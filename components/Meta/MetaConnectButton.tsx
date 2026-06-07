@@ -5,11 +5,12 @@ import { useSession, signIn } from "next-auth/react";
 
 export default function MetaConnectButton() {
 
-  const pathname = usePathname();
-  const username = pathname.split("/")[2];
-
   const { data: session, status } = useSession();
-  const [connected, setConnected] = useState<Boolean | null>(null);
+  const [connected, setConnected] = useState<boolean | null>(null);
+
+  const user = session?.user;
+  const username = user?.username;
+  const id = user?.id;
 
   useEffect(() => {
     // Only check DB when user is authenticated
@@ -17,7 +18,7 @@ export default function MetaConnectButton() {
 
     const fetchStatus = async () => {
       try {
-        const res = await fetch(`/api/influencer/${username}/creator-social-account`);
+        const res = await fetch(`/api/creator/${id}/creator-social-account`);
         if (!res.ok) {
           setConnected(false);
           return;
@@ -31,7 +32,7 @@ export default function MetaConnectButton() {
     };
 
     fetchStatus();
-  }, [status]);
+  }, [status, id]);
 
   const handleConnect = () => {
     const clientId = process.env.NEXT_PUBLIC_META_APP_ID;

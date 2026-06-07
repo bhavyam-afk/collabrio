@@ -18,7 +18,7 @@ const NavButtons = ({ onLoginClick, onSignupClick }: NavButtonsProps) => {
         Log in
       </LiquidButton>
       <LiquidButton
-        className="rounded-2xl font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+        className="rounded-2xl font-semibold text-slate-950"
         onClick={onSignupClick}
       >
         Get started

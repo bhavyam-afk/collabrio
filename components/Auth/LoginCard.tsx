@@ -91,7 +91,7 @@ const LoginCard = ({ onClose, onSwitchToSignup }: LoginCardProps) => {
 
         <LiquidButton
           type="submit"
-          className="mt-2 py-4 rounded-2xl bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition disabled:opacity-50"
+          className="mt-2 py-4 rounded-2xl text-white font-semibold transition disabled:opacity-50"
           disabled={loading}
         >
           {loading ? "Signing in..." : "Sign in"}

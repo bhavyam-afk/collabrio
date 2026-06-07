@@ -39,16 +39,6 @@ export function NavBaro({ items }: NavBarProps) {
   const [activeTab, setActiveTab] = useState(items[0].name)
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const [hovered, setHovered] = useState<DropdownKey | null>(null);
-  // const [isMobile, setIsMobile] = useState(false)
-
-  // useEffect(() => {
-  //   const handleResize = () => {
-  //     setIsMobile(window.innerWidth < 768)
-  //   }
-  //   handleResize()
-  //   window.addEventListener("resize", handleResize)
-  //   return () => window.removeEventListener("resize", handleResize)
-  // }, [])
 
   return (
     <div className={cn("relative flex items-center bg-white text-black py-1 px-5 overflow-visible")}>

@@ -50,8 +50,8 @@ export function Navbar({ onLoginClick, onSignupClick }: NavbarProps) {
   return (
     <nav className="bg-white text-black sticky top-4 z-50 flex items-center justify-between px-10 py-4 mx-auto max-w-7xl border rounded-full shadow-md">
       <div className="name">
-        <span className="text-2xl font-bold tracking-wide flex flex-col items-start justify-center min-w-30">
-          Collabrio 🚀
+        <span className="text-2xl font-bold tracking-wide flex items-start justify-center min-w-30">
+           Collabrio
         </span>
       </div>
       <div className="tubelight_bar">

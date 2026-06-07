@@ -32,7 +32,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main className="min-h-screen bg-linear-to-br from-slate-950 to-slate-800 text-white">
       <Navbar onLoginClick={openLogin} onSignupClick={openSignup} />
 
       <Hero />

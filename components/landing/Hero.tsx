@@ -9,7 +9,9 @@ const Hero = () => {
         <div className="relative z-10 flex flex-row w-full max-w-7xl mx-auto py-20 px-8 gap-16">
             {/* left main description  */}
             <div className="flex flex-col items-center justify-center w-1/2 pr-12">
-                <h1 className="handlee-regular text-5xl font-extrabold mb-6 text-center drop-shadow-2xl text-white tracking-wide">Welcome to Collabrio!</h1>
+                <h1 className="handlee-regular text-5xl font-extrabold mb-6 text-center drop-shadow-2xl text-white tracking-wide">Welcome to Collabrio 
+                    
+                </h1>
                 <p className="text-2xl text-gray-300 mb-12 text-center max-w-2xl leading-relaxed">The space where brands and influencers connect, collaborate, and launch successful campaigns. Explore our features below! It is a one stop platform for best connectivity and Marketing. Hope you find best people here.</p>
             </div>
             {/* right main description: Milestone timeline */}

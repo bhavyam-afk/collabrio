@@ -143,6 +143,7 @@ model CreatorProfile {
   socialAccounts     CreatorSocialAccount[]
   rawSocialSnapshots CreatorSocialRawSnapshot[]
   dailyAnalytics     CreatorDailyAnalytics[]
+  fullAnalytics      creatorFullAnalytics?
 
   @@index([userId])
 }
@@ -374,4 +375,23 @@ model CreatorAvailability {
 
   @@unique([creatorId, date])
   @@index([creatorId, date])
+}
+
+model creatorFullAnalytics {
+  id String @id @default(cuid())
+  creatorId String @unique
+  followers Int
+  reach Int
+  impressions Int
+  engagements Int
+  likes Int
+  comments Int
+  shares Int
+  saves Int
+  replies Int
+  profileViews Int
+  engagementRate Float
+  updatedAt DateTime @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
 }
