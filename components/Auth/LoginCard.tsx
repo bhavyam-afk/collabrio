@@ -7,18 +7,19 @@ import { useRouter } from "next/navigation"
 import { signIn, getSession } from "next-auth/react"
 
 interface LoginCardProps {
-  userType: "brand" | "creator"
+  onClose: () => void
+  onSwitchToSignup: () => void
 }
 
-const LoginCard = ({ userType }: LoginCardProps) => {
+const LoginCard = ({ onClose, onSwitchToSignup }: LoginCardProps) => {
   const router = useRouter()
 
-  const [email, setEmail]       = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError]       = useState("")
-  const [loading, setLoading]   = useState(false)
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError("")
     setLoading(true)
@@ -36,74 +37,77 @@ const LoginCard = ({ userType }: LoginCardProps) => {
     }
 
     const session = await getSession()
-
     if (!session?.user) {
-      setError("Unable to load session. Please try again.")
+      setError("Unable to load session. Try again.")
       setLoading(false)
       return
     }
 
     const { role, onboarding } = session.user
-
-    if (
-      (userType === "brand"   && role !== "BRAND") ||
-      (userType === "creator" && role !== "CREATOR")
-    ) {
-      setError(
-        `This is the ${userType === "brand" ? "Brand" : "Creator"} portal. ` +
-        `Your account is a ${role.toLowerCase()} account.`
-      )
-      setLoading(false)
+    if (onboarding === "PENDING") {
+      router.push(`/onboarding/${role.toLowerCase()}`)
       return
     }
 
-    // onboarding not finished
-    // if (onboarding === "PENDING") {
-    //   router.push(`/onboarding/${role.toLowerCase()}`)
-    //   return
-    // }
-
-    console.log("SESSION:", session);
-    console.log("ROLE:", session.user.role);
-
-    // all good
-    router.push(`/${role.toLowerCase()}/profile`)
+    router.push(role === "BRAND" ? "/brand/profile" : "/creator/profile")
   }
 
   return (
-    <div className="bg-[#222] rounded-2xl shadow-2xl p-10 w-100 max-w-full text-white flex flex-col gap-6">
-      <h2 className="text-3xl font-bold mb-2 text-center">
-        Login as {userType === "brand" ? "Brand" : "Creator"}
-      </h2>
+    <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 shadow-2xl">
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-semibold text-white">Welcome back</h2>
+          <p className="text-slate-400 text-sm">Sign in to continue</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-white"
+          aria-label="Close login modal"
+        >
+          ×
+        </button>
+      </div>
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin}>
         <input
           type="email"
           placeholder="Email"
-          className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={email}
-          onChange={e => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           required
+          className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
         />
         <input
           type="password"
           placeholder="Password"
-          className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           required
+          className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
         />
 
-        <LiquidButton type="submit" className="mt-4 w-full invert" disabled={loading}>
-          {loading ? "Signing in..." : "Login"}
-        </LiquidButton>
+        {error && <p className="text-rose-400 text-sm">{error}</p>}
 
-        {error && (
-          <p className="text-red-400 text-sm text-center mt-2">{error}</p>
-        )}
+        <LiquidButton
+          type="submit"
+          className="mt-2 py-4 rounded-2xl bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition disabled:opacity-50"
+          disabled={loading}
+        >
+          {loading ? "Signing in..." : "Sign in"}
+        </LiquidButton>
       </form>
 
-      <p className="text-sm text-gray-400 text-center">Forgot your password?</p>
+      <p className="mt-6 text-center text-sm text-slate-400">
+        No account?{' '}
+        <button
+          type="button"
+          onClick={onSwitchToSignup}
+          className="text-cyan-400 hover:underline"
+        >
+          Sign up
+        </button>
+      </p>
     </div>
   )
 }

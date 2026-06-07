@@ -17,6 +17,11 @@ const SignupCard = ({ userType }: SignupCardProps) => {
   const [email, setEmail]                     = useState("")
   const [password, setPassword]               = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [bio, setBio]                         = useState("")
+  const [location, setLocation]               = useState("")
+  const [niche, setNiche]                     = useState("")
+  const [instagram, setInstagram]             = useState("")
+  const [file, setFile]                       = useState<File | null>(null)
   const [error, setError]                     = useState("")
   const [loading, setLoading]                 = useState(false)
 
@@ -36,15 +41,21 @@ const SignupCard = ({ userType }: SignupCardProps) => {
     setLoading(true)
 
     try {
+      // Use multipart form so we can include an optional profile picture file
+      const formData = new FormData()
+      formData.append("username", username.trim())
+      formData.append("email", email.trim().toLowerCase())
+      formData.append("password", password)
+      formData.append("type", userType.toUpperCase())
+      if (bio) formData.append("bio", bio)
+      if (location) formData.append("location", location)
+      if (niche) formData.append("niche", niche)
+      if (instagram) formData.append("instagram", instagram)
+      if (file) formData.append("profilePic", file)
+
       const res = await fetch("/api/auth/signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username,
-          email:    email.trim().toLowerCase(),
-          password,
-          type:     userType.toUpperCase(), // "BRAND" | "CREATOR"
-        }),
+        body: formData,
       })
 
       const data = await res.json()
@@ -66,8 +77,7 @@ const SignupCard = ({ userType }: SignupCardProps) => {
         return
       }
 
-      // onboarding is PENDING — go to onboarding, not dashboard
-      router.push(`/${userType}/profile`)
+      router.push(`/onboarding/${userType}`)
 
     } catch {
       setError("Something went wrong. Please try again.")
@@ -92,6 +102,13 @@ const SignupCard = ({ userType }: SignupCardProps) => {
           required
         />
         <input
+          type="text"
+          placeholder="Display name / full name"
+          className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
+          value={bio}
+          onChange={e => setBio(e.target.value)}
+        />
+        <input
           type="email"
           placeholder="Email"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
@@ -99,6 +116,36 @@ const SignupCard = ({ userType }: SignupCardProps) => {
           onChange={e => setEmail(e.target.value)}
           required
         />
+        <input
+          type="text"
+          placeholder="Location (city, country)"
+          className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
+          value={location}
+          onChange={e => setLocation(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Primary niche (e.g., food, travel)"
+          className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
+          value={niche}
+          onChange={e => setNiche(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Instagram handle (optional)"
+          className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
+          value={instagram}
+          onChange={e => setInstagram(e.target.value)}
+        />
+        <label className="block space-y-1 text-sm text-slate-300">
+          <span className="text-sm text-gray-300">Profile picture</span>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={e => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-gray-300 file:rounded-full file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-slate-950"
+          />
+        </label>
         <input
           type="password"
           placeholder="Password (min 8 characters)"
