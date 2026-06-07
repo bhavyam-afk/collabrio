@@ -14,6 +14,7 @@ const schema = z.object({
   location: z.string().optional(),
   niche:    z.string().optional(),
   instagram:z.string().optional(),
+  profilePic: z.instanceof(File).optional(),
 })
 
 export async function POST(req: Request) {
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
       location: body.location,
       niche:    body.niche,
       instagram: body.instagram,
+      profilePic: body.profilePic,
     })
 
     if (!parsed.success) {
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { email, username, password, type, bio, location, niche, instagram } = parsed.data
+    const { email, username, password, type, bio, location, niche, instagram, profilePic } = parsed.data
 
     // check uniqueness
     const existing = await prisma.user.findFirst({
@@ -99,6 +101,7 @@ export async function POST(req: Request) {
             bio: bio ?? undefined,
             industryTags: [],
             socialLinks: instagram ? [{ platform: "instagram", url: instagram }] : undefined,
+            logoUrl: undefined,
           },
         })
       } else {
@@ -113,7 +116,6 @@ export async function POST(req: Request) {
           },
         })
       }
-
       return newUser
     })
 
@@ -124,9 +126,9 @@ export async function POST(req: Request) {
         const bytes = await file.arrayBuffer()
         const buffer = Buffer.from(bytes)
         const ext = file.name.split('.').pop()
-        const key = `${type === 'BRAND' ? 'brands' : 'creators'}/${user.id}/profile.${ext}`
+        const key = `${type === 'BRAND' ? 'brands' : 'creators'}/${user.id}/${type === 'BRAND' ? 'logo-' : 'profile-'}${ext}`
 
-        const uploadResult = await uploadToS3(buffer, key, file.type || 'image/jpeg')
+        const uploadResult = await uploadToS3(buffer, key, file.type || 'image/jpeg', true)
 
         if (type === 'BRAND') {
           await prisma.brandProfile.update({ where: { userId: user.id }, data: { logoUrl: uploadResult.url } })

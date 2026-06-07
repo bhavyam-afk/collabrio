@@ -95,7 +95,7 @@ export default function BrandOnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white py-12 px-4">
+    <main className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-800 text-white py-12 px-4">
       <div className="mx-auto max-w-lg">
         <div className="mb-8 text-center">
           <p className="text-sm uppercase tracking-[0.3em] text-cyan-300">

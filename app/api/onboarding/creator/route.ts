@@ -104,6 +104,7 @@ export async function POST(req: Request) {
           nicheTags,
           followerCount: isNaN(followerCount) ? 0 : followerCount,
           profilePicUrl,
+          mlScore: Math.round(Math.random() * 100),
         },
       })
     })

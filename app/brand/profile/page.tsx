@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-const fallbackImage = "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80"
+const fallbackImage = "/globe.svg"
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString("en-US", {
@@ -102,7 +102,17 @@ export default function BrandProfilePage() {
           <div className="relative grid gap-8 lg:grid-cols-[1.3fr_0.9fr] lg:items-end">
             <div className="flex items-center gap-6">
               <div className="relative h-28 w-28 overflow-hidden rounded-full border border-white/10 bg-slate-800 shadow-lg shadow-cyan-500/10">
-                <img src={logo} alt={brandName} className="h-full w-full object-cover" />
+                <img
+                  src={logo}
+                  alt={brandName}
+                  className="h-full w-full object-cover"
+                  onError={(event) => {
+                    const target = event.currentTarget
+                    if (target.src !== fallbackImage) {
+                      target.src = fallbackImage
+                    }
+                  }}
+                />
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-cyan-400/80">Brand profile</p>

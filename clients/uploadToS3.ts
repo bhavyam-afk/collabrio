@@ -5,10 +5,20 @@ import { s3 } from "./s3"
 export async function uploadToS3(
   fileBuffer: Buffer,
   key: string,
-  contentType: string
+  contentType: string,
+  publicRead = false
 ) {
+  const bucket = process.env.AWS_S3_BUCKET
+  const region = process.env.AWS_REGION
+
+  if (!bucket) {
+    throw new Error("Missing AWS_S3_BUCKET environment variable")
+  }
+
+  // Note: ACLs are not included as many S3 buckets have ACLs disabled
+  // Public access can be configured via bucket policies instead
   const command = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET!,
+    Bucket: bucket,
     Key: key,
     Body: fileBuffer,
     ContentType: contentType,
@@ -16,8 +26,9 @@ export async function uploadToS3(
 
   await s3.send(command)
 
-  // Return both the stored key and the object URL (not necessarily public)
-  const url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
+  const url = region
+    ? `https://${bucket}.s3.${region}.amazonaws.com/${key}`
+    : `https://${bucket}.s3.amazonaws.com/${key}`
   return { url, key }
 }
 

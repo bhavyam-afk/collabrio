@@ -1,406 +1,124 @@
-# Collabrio Payment & Escrow Flow
 
-## Core Principle
+# Razorpay Integration — Technical Reference
 
-Collabrio is not a bank.
+This document describes how Collabrio integrates with Razorpay for payments, which Razorpay services the app uses, and how our backend routes implement the payment lifecycle. It also covers the implemented escrow logic, content delivery checks, and notes on payouts and webhooks.
 
-Razorpay handles the real money.
+## Razorpay services used
 
-Our database only tracks ownership of money and collaboration state.
+- Orders API (razorpay.orders.create)
+   - We create an order on behalf of a collaboration to initiate checkout. Order amount uses package price (in INR, paise).
+- Payment verification (HMAC SHA256 signature)
+   - After frontend checkout, Razorpay returns payment_id, order_id, and signature. The backend validates the signature using RAZORPAY_KEY_SECRET.
+- Transfers / Payouts (razorpay.transfers)
+   - Mentioned in code but intentionally disabled in this demo. Real payouts require fund_account onboarding and platform KYC.
+- Webhooks
+   - We listen for payout events in `app/api/razorpay/webhook/route.ts` to reconcile transfer status. Other webhook events (payment.authorized etc.) can be supported.
 
-The platform acts as an escrow layer:
+## Environment variables
 
-```text
-Brand
-  ↓
-Platform Escrow
-  ↓
-Creator
-```
+- `RAZORPAY_KEY_ID` — server API key id
+- `RAZORPAY_KEY_SECRET` — server API secret (used to verify signatures)
+- `NEXT_PUBLIC_RAZORPAY_KEY_ID` — exposed to frontend to initialize Razorpay checkout
+- `RAZORPAY_ACCOUNT_NUMBER` — used for transfer configuration (not used in demo)
 
----
+## Routes and how they map to payment flow
 
-# Enums Used
+All payment code lives under `app/api/razorpay/`.
 
-## Collaboration Status
+1. `POST /api/razorpay/payment/create` (file: `app/api/razorpay/payment/create/route.ts`)
+    - Purpose: create a Razorpay order for a collaboration when a brand chooses to pay.
+    - Auth: brand only (validated with `getServerSession` and `authOptions`).
+    - Checks:
+       - Collaboration exists and belongs to the requesting brand.
+       - Collaboration status must be `ACTIVE` (creator accepted request).
+       - Avoid creating duplicate orders: reuses pending order if present.
+    - Actions:
+       - Calls `razorpay.orders.create({ amount, currency, receipt, notes })`.
+       - Stores a `Transaction` with `type: BRAND_PAYMENT, status: PENDING, externalOrderId: order.id`.
+    - Response: `{ orderId, amount, currency }` for frontend to open checkout.
 
-Tracks collaboration lifecycle.
+2. `POST /api/razorpay/payment/verify` (file: `app/api/razorpay/payment/verify/route.ts`)
+    - Purpose: verify payment after frontend checkout and move funds into platform escrow.
+    - Inputs: `{ razorpay_payment_id, razorpay_order_id, razorpay_signature, collabId }`.
+    - Verification:
+       - Recomputes HMAC SHA256 signature: `HMAC(RAZORPAY_KEY_SECRET, order_id|payment_id)` and compares.
+       - If signature mismatch → 400 error.
+    - Actions (atomic transaction):
+       - Create or update `Transaction` to `COMPLETED` with `externalPaymentId`.
+       - Update platform wallet `pendingBalance` by package price (escrow).
+       - Increment brand wallet `totalSpent`.
+       - Set `Collaboration.PaymentStatus = PLATFORM_HOLD`.
+       - Upsert `PackageCollaboration` with `PaymentStatus = BRAND_PAID` and `contentStatus = NOT_SUBMITTED`.
+    - Response: `{ success: true }`.
 
-```prisma
-enum CollabStatus {
-  PENDING
-  ACTIVE
-  COMPLETED
-  CANCELLED
-}
-```
+3. `POST /api/uploads/creatordraft` (file: `app/api/uploads/creatordraft/route.ts`)
+    - Purpose: allow creator to upload draft content.
+    - Checks:
+       - Creator authenticated and owns the collaboration.
+       - `collab.collabStatus === ACTIVE`.
+       - `PackageCollaboration.PaymentStatus` must be `BRAND_PAID` or `PLATFORM_HOLD` (ensures brand has paid and funds are escrowed).
+    - Actions:
+       - Uploads file to S3 using `uploadToS3` and stores S3 key/url.
+       - Creates or updates `PackageCollaboration.contentDraft` and sets `contentStatus = SUBMITTED` and `draftSubmittedAt`.
+    - Response: includes `fileUrl`, `previewUrl` and updated content metadata.
 
----
+4. `PATCH /api/brand/content/[collabId]` (file: `app/api/brand/content/[collabId]/route.ts`)
+    - Purpose: brand reviews and approves or requests improvements.
+    - Actions on `approve`:
+       - Require content submitted.
+       - Marks `PackageCollaboration.contentStatus = APPROVED` and sets `PaymentStatus = CREATOR_PAID`.
+       - Marks `Collaboration.collabStatus = COMPLETED` and `PaymentStatus = CREATOR_PAID`.
+       - Performs wallet transfers (atomic): release escrow (decrement platform pendingBalance), credit creator wallet (creator share), credit platform fee.
+       - Creates transactions for creator earning and platform fee.
+    - Actions on `request_improvement`:
+       - Marks `PackageCollaboration.contentStatus = IMPROVEMENT_REQUESTED`, increments `revisionCount`, stores `brandFeedback`.
+       - Keeps funds locked (`PaymentStatus = PLATFORM_HOLD`) so creator is not paid until approval.
 
-## Content Status
+5. `POST /api/razorpay/payout` (file: `app/api/razorpay/payout/route.ts`)
+    - Purpose in principle: initiate transfers from platform to creator bank/UPI using Razorpay transfers API.
+    - Current state in this repo: intentionally disabled — the route returns 501 (Not Implemented) with an explanation.
+    - Reason: payouts require storing `fund_account_id` for beneficiaries and platform KYC; not appropriate for the college demo.
 
-Tracks content lifecycle.
+6. `POST /api/razorpay/webhook` (file: `app/api/razorpay/webhook/route.ts`)
+    - Purpose: reconcile external transfer/payout events.
+    - Implemented handlers:
+       - `payout.processed` → mark `Transaction.status = COMPLETED`.
+       - `payout.failed` → mark `Transaction.status = FAILED` and roll back funds to the recipient wallet (simple compensation).
+    - Note: Webhook signing verification is recommended for production but not present in the demo.
 
-```prisma
-enum ContentStatus {
-  NOT_SUBMITTED
-  SUBMITTED
-  IMPROVEMENT_REQUESTED
-  APPROVED
-  REJECTED
-}
-```
+## Escrow and wallet model
 
----
+- Brand pays via Razorpay → we record a `BRAND_PAYMENT` transaction and mark it `COMPLETED` on verification.
+- Funds are held in the platform wallet `pendingBalance` until the brand approves the content.
+- On approval, platform releases escrow: `pendingBalance` decremented, creator `currentBalance` incremented (creator receives 90% by current logic), platform receives fee (10%).
+- On cancellation before approval, refunds are processed: platform pending balance decremented and brand wallet credited; creator may receive partial compensation if drafts were submitted.
 
-## Payment Status
+## Decisions and rationale
 
-Tracks where money currently resides.
+- Payouts disabled: to avoid collecting or processing real beneficiary data (fund_account_id) and because platform-level KYC is out-of-scope for a college project.
+- Webhooks: included a basic handler for payout events to reconcile transactions — in production you should verify webhook signatures and handle more events (payment.authorized, payment.failed, order.*) and idempotency.
 
-```prisma
-enum PaymentStatus {
-  UNPAID
-  BRAND_PAID
-  PLATFORM_HOLD
-  CREATOR_PAID
-  REFUNDED
-}
-```
+## Security notes and recommendations
 
----
+- Keep `RAZORPAY_KEY_SECRET` only on server-side and never expose it in client bundles.
+- Verify Razorpay signatures on payment verify and webhooks.
+- Implement idempotency for order creation and webhook processing.
+- Add monitoring/alerts for failed transfers and reconciliation issues.
 
-## Transaction Status
+## Where to look in the codebase
 
-Tracks external payment execution.
-
-```prisma
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  INWALLET
-}
-```
-
----
-
-# Complete Happy Path
-
-Assume:
-
-```text
-Package Price = ₹5,000
-
-Platform Fee = 10%
-Creator Share = 90%
-```
-
----
-
-# Step 1 — Brand Sends Invitation
-
-Brand selects package and sends collaboration request.
-
-## Collaboration
-
-```text
-CollabStatus = PENDING
-```
-
-## Payment
-
-```text
-PaymentStatus = UNPAID
-```
-
-## Content
-
-```text
-No PackageCollaboration yet
-```
-
-## Money
-
-```text
-Brand      ₹5000
-Platform   ₹0
-Creator    ₹0
-```
+- `app/api/razorpay/payment/create/route.ts` — create order
+- `app/api/razorpay/payment/verify/route.ts` — verify payment and move funds to escrow
+- `app/api/uploads/creatordraft/route.ts` — creator upload flow (requires funds in escrow)
+- `app/api/brand/content/[collabId]/route.ts` — approve / request improvement and release escrow
+- `app/api/razorpay/payout/route.ts` — payout route (501 stub in demo)
+- `app/api/razorpay/webhook/route.ts` — simple webhook handler for payout events
+- `documentations/RAZORPAY_SETUP.md` — setup and local env guidance
 
 ---
 
-# Step 2 — Creator Accepts
-
-Creator accepts invitation.
-
-## Collaboration
-
-```text
-CollabStatus = ACTIVE
-```
-
-## Content
-
-```text
-ContentStatus = NOT_SUBMITTED
-```
-
-## Payment
-
-```text
-PaymentStatus = UNPAID
-```
-
-## Money
-
-No movement.
-
----
-
-# Step 3 — Brand Pays
-
-Brand completes Razorpay Checkout.
-
-Payment successfully captured.
-
-Create:
-
-```text
-TransactionType   = BRAND_PAYMENT
-TransactionStatus = COMPLETED
-```
-
-## Collaboration
-
-```text
-CollabStatus = ACTIVE
-```
-
-## Payment
-
-```text
-PaymentStatus = BRAND_PAID
-```
-
-## Money
-
-Money has left the brand.
-
-```text
-Brand      -5000
-Platform   0
-Creator    0
-```
-
----
-
-# Step 4 — Escrow Lock
-
-Immediately after payment verification.
-
-Platform becomes escrow holder.
-
-Update platform wallet:
-
-```text
-platform.pendingBalance += 5000
-```
-
-## Payment
-
-```text
-PaymentStatus = PLATFORM_HOLD
-```
-
-Meaning:
-
-```text
-Brand has paid.
-Creator has not earned yet.
-Platform is holding funds.
-```
-
-## Money
-
-```text
-Brand      -5000
-Platform   Pending: 5000
-Creator    0
-```
-
----
-
-# Step 5 — Creator Uploads Draft
-
-Creator submits work.
-
-## Content
-
-```text
-ContentStatus = SUBMITTED
-```
-
-## Payment
-
-```text
-PaymentStatus = PLATFORM_HOLD
-```
-
-## Money
-
-Still locked in escrow.
-
-```text
-Platform Pending = 5000
-```
-
----
-
-# Step 6 — Brand Requests Changes
-
-Brand is not satisfied.
-
-## Content
-
-```text
-ContentStatus = IMPROVEMENT_REQUESTED
-```
-
-## Payment
-
-```text
-PaymentStatus = PLATFORM_HOLD
-```
-
-## Money
-
-Still locked.
-
-No wallet changes.
-
----
-
-# Step 7 — Creator Resubmits
-
-Creator uploads revised content.
-
-## Content
-
-```text
-ContentStatus = SUBMITTED
-```
-
-## Payment
-
-```text
-PaymentStatus = PLATFORM_HOLD
-```
-
-## Money
-
-Still locked.
-
----
-
-# Step 8 — Brand Approves
-
-This is the escrow release event.
-
-Assume:
-
-```text
-Package Price = ₹5000
-
-Creator Share = ₹4500
-Platform Fee = ₹500
-```
-
----
-
-## Content
-
-```text
-ContentStatus = APPROVED
-```
-
----
-
-## Collaboration
-
-```text
-CollabStatus = COMPLETED
-```
-
----
-
-## Payment
-
-```text
-PaymentStatus = CREATOR_PAID
-```
-
----
-
-## Wallet Updates
-
-Release escrow:
-
-```text
-platform.pendingBalance -= 5000
-```
-
-Platform earns fee:
-
-```text
-platform.currentBalance += 500
-platform.totalEarned += 500
-```
-
-Creator receives earnings:
-
-```text
-creator.currentBalance += 4500
-creator.totalEarned += 4500
-```
-
----
-
-## Transactions Created
-
-Creator earning:
-
-```text
-TransactionType   = CREATOR_EARNING
-TransactionStatus = INWALLET
-```
-
-Platform fee:
-
-```text
-TransactionType   = PLATFORM_FEE
-TransactionStatus = COMPLETED
-```
-
----
-
-## Money
-
-```text
-Brand      spent ₹5000
-
-Platform   earned ₹500
-
-Creator    earned ₹4500
-```
-
----
-
-# Creator Withdrawal
-
-Creator decides to withdraw earnings.
 
 This is a completely separate flow.
-
 Payment status DOES NOT change.
 
 It remains:
@@ -413,37 +131,8 @@ because the creator already owns the money.
 
 ---
 
-## Withdrawal Request
-
-Create:
-
-```text
-TransactionType   = PAYOUT
-TransactionStatus = PENDING
-```
-
-Call Razorpay Payout API.
-
----
-
-## Razorpay Success Webhook
-
-Update:
-
-```text
-TransactionStatus = COMPLETED
-```
-
-Wallet:
-
-```text
-creator.currentBalance -= withdrawAmount
-```
-
----
 
 # Refund Flow
-
 ## Scenario
 
 Brand paid.
@@ -577,7 +266,7 @@ totalSpent
 
 ## Platform Wallet
 
-Tracks:
+Tracks: The platform wallet is the single source of truth for escrowed funds.
 
 ```text
 pendingBalance
@@ -599,21 +288,3 @@ totalEarned
 ```
 
 Creator withdraws from currentBalance.
-
----
-
-# Important Rule
-
-Never release creator earnings before:
-
-```text
-ContentStatus = APPROVED
-```
-
-Never release escrow before:
-
-```text
-CollabStatus = COMPLETED
-```
-
-The platform wallet is the single source of truth for escrowed funds.

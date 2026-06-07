@@ -1,48 +1,26 @@
-import Razorpay from "razorpay";
-import { NextResponse } from "next/server";
-import prisma from "@/clients/prisma";
-import { TransactionStatus } from "@prisma/client";
+// Payouts are disabled in this repository/demo.
+//
+// Rationale: real payouts require the platform to be a registered business and
+// complete Razorpay KYC (beneficiary/fund account onboarding). For this college
+// project we intentionally disable the payout flow to avoid storing or
+// attempting live transfers. Keep this stub instead of deleting the file so
+// callers get a clear 501 response and the project history remains intact.
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-});
+import { NextResponse } from "next/server"
 
-export async function POST(req: Request) {
-  const { transactionId } = await req.json();
-
-  const tx = await prisma.transaction.findUnique({
-    where: { id: transactionId },
-  });
-
-  if (!tx || tx.status !== TransactionStatus.PENDING) {
-    return new Response("Invalid transaction", { status: 400 });
-  }
-
-  // 🔔 fund_account_id should already be saved for creator
-  const transferApi = (razorpay as any).transfers;
-
-  if (!transferApi || typeof transferApi.create !== "function") {
-    return new Response("Razorpay transfers API unavailable", { status: 500 });
-  }
-
-  const transfer: any = await transferApi.create({
-    account_number: process.env.RAZORPAY_ACCOUNT_NUMBER!,
-    fund_account_id: "fa_creator_xxx",
-    amount: Number(tx.amount) * 100,
-    currency: "INR",
-    mode: "UPI",
-    purpose: "payout",
-    queue_if_low_balance: true,
-  });
-
-  // Save Razorpay transfer ID
-  await prisma.transaction.update({
-    where: { id: tx.id },
-    data: {
-      externalPaymentId: transfer?.id,
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "Payouts are disabled in this demo/college project. The platform payout flow requires business KYC and is intentionally disabled.",
     },
-  });
+    { status: 501 }
+  )
+}
 
-  return NextResponse.json({ success: true });
+export async function GET() {
+  return NextResponse.json(
+    { error: "Payouts disabled (demo)." },
+    { status: 501 }
+  )
 }

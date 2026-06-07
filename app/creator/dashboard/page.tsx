@@ -79,7 +79,7 @@ export default function Page() {
       { label: "Active collabs", value: counts.acceptedCollaborations, description: "Collaborations you have accepted and are working on." },
       { label: "Cancelled collabs", value: counts.cancelledCollaborations, description: "Requests withdrawn or collaborations cancelled by brands." },
       { label: "Completed collabs", value: counts.completedCollaborations, description: "Collaborations successfully completed." },
-      { label: "Total money earned", value: `₹${totalEarned.toLocaleString()}`, description: "Total earnings from all completed collaborations.", isEarnings: true },
+      { label: "Total money earned", value: `₹${totalEarned.toLocaleString()}`, description: "Total earnings from all collaborations.", isEarnings: true },
     ],
     [counts, totalEarned]
   )
@@ -206,14 +206,9 @@ export default function Page() {
           {statCards.map((card) => (
             <div 
               key={card.label} 
-              className={`rounded-4xl border p-6 shadow-lg transition ${
-                (card as any).isEarnings 
-                  ? "border-cyan-500/30 bg-linear-to-br from-cyan-500/10 to-slate-900/80 shadow-cyan-500/10 lg:col-span-2"
-                  : "border-white/10 bg-slate-900/80 shadow-black/10"
-              }`}
-            >
+              className= "rounded-4xl border p-6 shadow-lg transition border-white/10 bg-slate-900/80 shadow-black/10">
               <p className="text-sm uppercase tracking-[0.35em] text-slate-500">{card.label}</p>
-              <p className={`mt-4 text-4xl font-semibold ${(card as any).isEarnings ? "text-cyan-400" : "text-white"}`}>{card.value}</p>
+              <p className={`mt-4 text-4xl font-semibold text-white"}`}>{card.value}</p>
               <p className="mt-3 text-sm leading-6 text-slate-400">{card.description}</p>
             </div>
           ))}

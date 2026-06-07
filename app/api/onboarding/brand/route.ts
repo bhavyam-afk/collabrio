@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       }
       const key = `onboarding/brands/${username}/logo-${Date.now()}`
       const buffer = Buffer.from(await file.arrayBuffer())
-      const result = await uploadToS3(buffer, key, file.type)
+      const result = await uploadToS3(buffer, key, file.type, true)
       logoUrl = result.url
     }
 

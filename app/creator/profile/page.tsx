@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react"
 
-const fallbackImage =
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80"
-
+const fallbackImage = "/glove.svg"
+  
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString("en-US", { month: "short", year: "numeric" })
 }
@@ -139,9 +138,6 @@ export default function Page() {
                 <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
                   {creator.name}
                 </h1>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-                  {creator.bio}
-                </p>
               </div>
             </div>
 
@@ -173,7 +169,7 @@ export default function Page() {
                 <div>
                   <h2 className="text-2xl font-semibold text-white">About the creator</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-400">
-                    Professional creator profile built for pitch decks, brand reviews, and campaign planning.
+                    {creator.bio}
                   </p>
                 </div>
                 <div className="rounded-3xl bg-slate-900/80 px-4 py-2 text-sm text-slate-300 ring-1 ring-white/10">

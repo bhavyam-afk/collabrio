@@ -13,20 +13,12 @@ const tabs = [
 
 const BrandLayout = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
-  const router = useRouter()
 
   const handleLogout = async () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("sessionToken")
-      localStorage.removeItem("authToken")
-      sessionStorage.removeItem("sessionToken")
-      document.cookie = "next-auth.session-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-      document.cookie = "next-auth.csrf-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-    }
-
-    await signOut({ callbackUrl: "/api/auth/signin" })
-    router.push("/")
-  }
+    await signOut({
+      callbackUrl: "/",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#050816] text-white">
