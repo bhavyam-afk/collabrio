@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/clients/prisma";
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
 
   const auth = req.headers.get("authorization");
 

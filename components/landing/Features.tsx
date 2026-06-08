@@ -4,23 +4,23 @@ import React from 'react'
 const features = [
   {
     title: "AI-Powered Matching",
-    description: "Discover the perfect partnerships with our intelligent matchmaking engine. By analyzing audience demographics, engagement patterns, and brand values, our AI ensures that influencers and brands connect in ways that drive real impact. No more guesswork—just smart, data-driven matches that deliver results.",
+    description: "Information Retrival System pipeline designed with RRF and hybrid search that is a combination of traditional BM-25 and sematic matching using cosine similarity on document embeddings made in FAISS. Has LLM Layers for query understanding, spell corrections and final result evaluations.",
   },
   {
-    title: "Campaign Analytics",
-    description: "Stay ahead with real-time insights that matter. Our analytics dashboard goes beyond vanity metrics to show you true performance—reach, engagement, ROI, and more. With actionable reports and clear visualizations, you can optimize campaigns on the fly and make every collaboration count.",
+    title: "S3 Storage",
+    description: "Amazon AWS S3 (Simple Storage Service) is used for storing creator drafts and other files such as creator/ brand profile pictures. Dedicated and clean routing for each use case has been done in a single bucket.",
   },
   {
-    title: "Secure Payments",
-    description: "We make financial transactions effortless and reliable. With built-in secure payment gateways and escrow protection, both brands and influencers enjoy peace of mind. Payments are fast, transparent, and safeguarded—ensuring trust and smooth collaboration every step of the way.",
+    title: "Secure RazorPay Payments",
+    description: "Escrow flow of payment has been implemented partially to make the platform be first to solve the biggest flow of this industry that is payment failures. Collabrio holds the payment till collab is not cancelled, after it is approved by brand money moves to the creator.",
   },
   {
-    title: "Global Reach",
-    description: "Expand your influence beyond borders. Our platform opens doors to a worldwide network of creators and brands, giving you opportunities to collaborate across industries and geographies. Whether you’re scaling locally or globally, we help you build authentic connections that grow your impact.",
+    title: "Meta Connectivity",
+    description: "We at Collabrio believe in data driven decisions, So here is Meta OAuth for up-to date analytics of creators that help grow creators and brands both in their respective fields.",
   },
   {
-    title: "Success Stories",
-    description: "See what’s possible when collaboration meets innovation. From emerging startups to global enterprises, brands and influencers alike have achieved measurable growth with our platform. Be inspired by their journeys—and start creating your own success story with us.",
+    title: "RESTful API Suite",
+    description: "Implemented 20+ RESTful APIs for seamless integration and data exchange. Also we have implemented a clean and highly scalable database schema in PostgreSQL with 14 tables and 13 enums that help define each state very clearly.",
   },
 ];
 

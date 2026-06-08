@@ -14,7 +14,7 @@ function getMetric(metrics: any[], name: string): number {
   return Number(value);
 }
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const auth = req.headers.get("authorization");
 
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {

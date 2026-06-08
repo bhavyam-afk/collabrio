@@ -18,7 +18,7 @@ function getCardIcon(title: string): React.ReactNode {
           <circle cx="20" cy="20" r="3" fill="#fff" />
         </svg>
       );
-    case "Campaign Analytics":
+    case "S3 Storage":
       return (
         <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="20" cy="20" r="20" fill="#10b981" />
@@ -27,7 +27,7 @@ function getCardIcon(title: string): React.ReactNode {
           <rect x="24" y="14" width="4" height="14" fill="#fff" />
         </svg>
       );
-    case "Secure Payments":
+    case "Secure RazorPay Payments":
       return (
         <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="20" cy="20" r="20" fill="#f59e42" />
@@ -35,7 +35,7 @@ function getCardIcon(title: string): React.ReactNode {
           <circle cx="20" cy="21" r="2" fill="#f59e42" />
         </svg>
       );
-    case "Global Reach":
+    case "Meta Connectivity":
       return (
         <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="20" cy="20" r="20" fill="#38bdf8" />
@@ -43,7 +43,7 @@ function getCardIcon(title: string): React.ReactNode {
           <path d="M20 10v20M10 20h20" stroke="#fff" strokeWidth="2" />
         </svg>
       );
-    case "Success Stories":
+    case "RESTful API Suite":
       return (
         <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="20" cy="20" r="20" fill="#e879f9" />
