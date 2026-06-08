@@ -21,12 +21,12 @@ interface NavbarProps {
 const navItems: NavItem[] = [
   {
     name: "For Brands",
-    url: "/brand",
+    url: "/information/brand",
     icon: Briefcase,
   },
   {
-    name: "For Influencers",
-    url: "/creator",
+    name: "For Creators",
+    url: "/information/creator",
     icon: Users,
   },
   {

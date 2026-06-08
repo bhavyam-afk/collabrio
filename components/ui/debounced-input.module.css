@@ -1,0 +1,19 @@
+.input {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: #0f1724; /* slate-900-ish */
+  color: white;
+  border: 1px solid rgba(148,163,184,0.08);
+  transition: transform 120ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  outline: none;
+}
+
+.input:focus {
+  border-color: rgba(34,211,238,0.9); /* cyan-400 */
+  box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+}
+
+.pulse {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 22px rgba(2,6,23,0.35);
+}

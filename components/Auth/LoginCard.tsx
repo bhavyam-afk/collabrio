@@ -3,6 +3,7 @@
 
 import React, { useState } from "react"
 import { LiquidButton } from "@/components/ui/liquid-glass-button"
+import DebouncedInput from "@/components/ui/DebouncedInput"
 import { useRouter } from "next/navigation"
 import { signIn, getSession } from "next-auth/react"
 
@@ -70,19 +71,21 @@ const LoginCard = ({ onClose, onSwitchToSignup }: LoginCardProps) => {
       </div>
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin}>
-        <input
+        <DebouncedInput
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          debounce={150}
           required
           className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
         />
-        <input
+        <DebouncedInput
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          debounce={150}
           required
           className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
         />

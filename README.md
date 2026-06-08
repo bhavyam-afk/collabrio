@@ -47,7 +47,7 @@ Use these sample credentials to log in and exercise the brand and creator flows.
 ### Brand accounts
  
 - Email: apple@apple.com
-  Password: apple apple
+  Password: appleapple
 - Email: openai@openai.com
   Password: openaiopenai
 

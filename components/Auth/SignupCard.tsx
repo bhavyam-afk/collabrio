@@ -4,6 +4,7 @@
 import React, { useState } from "react"
 import { signIn } from "next-auth/react"
 import { LiquidButton } from "@/components/ui/liquid-glass-button"
+import DebouncedInput from "@/components/ui/DebouncedInput"
 import { useRouter } from "next/navigation"
 
 interface SignupCardProps {
@@ -93,49 +94,55 @@ const SignupCard = ({ userType }: SignupCardProps) => {
       </h2>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-        <input
+        <DebouncedInput
           type="text"
           placeholder="Username (letters, numbers, underscores)"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={username}
           onChange={e => setUsername(e.target.value)}
+          debounce={150}
           required
         />
-        <input
+        <DebouncedInput
           type="text"
           placeholder="Display name / full name"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={bio}
           onChange={e => setBio(e.target.value)}
+          debounce={150}
         />
-        <input
+        <DebouncedInput
           type="email"
           placeholder="Email"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={email}
           onChange={e => setEmail(e.target.value)}
+          debounce={150}
           required
         />
-        <input
+        <DebouncedInput
           type="text"
           placeholder="Location (city, country)"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={location}
           onChange={e => setLocation(e.target.value)}
+          debounce={150}
         />
-        <input
+        <DebouncedInput
           type="text"
           placeholder="Primary niche (e.g., food, travel)"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={niche}
           onChange={e => setNiche(e.target.value)}
+          debounce={150}
         />
-        <input
+        <DebouncedInput
           type="text"
           placeholder="Instagram handle (optional)"
           className="px-4 py-3 rounded bg-gray-800 text-white focus:outline-none"
           value={instagram}
           onChange={e => setInstagram(e.target.value)}
+          debounce={150}
         />
         <label className="block space-y-1 text-sm text-slate-300">
           <span className="text-sm text-gray-300">Profile picture</span>

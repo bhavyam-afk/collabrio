@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import DebouncedInput from "@/components/ui/DebouncedInput"
+import DebouncedTextarea from "@/components/ui/DebouncedTextarea"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
@@ -118,28 +120,31 @@ export default function CreatorOnboardingPage() {
         <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-8 shadow-2xl">
           {step === "account" ? (
             <form onSubmit={handleAccountNext} className="flex flex-col gap-4">
-              <input
+              <DebouncedInput
                 type="text"
                 placeholder="Username (e.g. bhavyam_creates)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                debounce={150}
                 className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
               />
-              <input
+              <DebouncedInput
                 type="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                debounce={150}
                 className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
               />
-              <input
+              <DebouncedInput
                 type="password"
                 placeholder="Password (min 8 characters)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                debounce={150}
                 className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
               />
               {error && <p className="text-rose-400 text-sm">{error}</p>}
@@ -188,11 +193,12 @@ export default function CreatorOnboardingPage() {
                   className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
                 />
               </div>
-              <textarea
+              <DebouncedTextarea
                 placeholder="Tell brands what makes your content special..."
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows={3}
+                debounce={150}
                 className="px-4 py-3 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:outline-none focus:border-cyan-400"
               />
               <input
