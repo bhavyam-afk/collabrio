@@ -10,6 +10,7 @@ The app uses Vercel cron configuration in `vercel.json`:
 - `/api/cron/populate` runs daily at `25 1 * * *` (1:25 AM)
 
 These two jobs are intentionally separated so the system first collects raw data and then processes it into analytics.
+vercel only accepts GET req so although we are POSTing into database but we still use a GET request.
 
 ## Authorization
 

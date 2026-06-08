@@ -1,4 +1,5 @@
 # Collabrio Documentation
+- All technical documentations are present in `documentations` folder.
 
 ## What is Collabrio?
 
@@ -36,18 +37,18 @@ Collabrio is designed as a college/demo project, so the core features focus on c
 
 Use these sample credentials to log in and exercise the brand and creator flows.
 
-### Brand accounts
-
-- Email: brand1@example.com
-  Password: BrandPass123!
-- Email: brand2@example.com
-  Password: BrandPass123!
-
 ### Creator accounts
+
+- Email: techguru@gmail.com
+  Password: techguru
+- Email: foodwithsam@gmail.com
+  Password: foodwithsam
+
+### Brand accounts
  
-- Email: creator1@example.com
-  Password: CreatorPass123!
-- Email: creator2@example.com
-  Password: CreatorPass123!
+- Email: apple@apple.com
+  Password: apple apple
+- Email: openai@openai.com
+  Password: openaiopenai
 
 > Note: These are example test credentials. If you want, I can also add a small `documentations/credentials.md` file with more detail for each role and expected test scenarios.
