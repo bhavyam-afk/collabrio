@@ -348,3 +348,56 @@ enum NotificationType {
   PAYMENT_RECEIVED
   PAYOUT_PROCESSED
 }
+
+// ─── Saga Compensating Flows ────────────────────────────────────────────────
+
+model SagaLog {
+  id        String     @id @default(cuid())
+  collabId  String
+  sagaType  SagaType
+  step      String
+  status    SagaStatus @default(PENDING)
+  payload   Json?
+  error     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([collabId])
+  @@index([status])
+}
+
+enum SagaType {
+  APPROVE_COLLABORATION
+  CANCEL_COLLABORATION
+  PAYOUT
+}
+
+enum SagaStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  COMPENSATED
+}
+
+// ─── Analytics Worker (Producer/Consumer Split) ─────────────────────────────
+
+model AnalyticsJob {
+  id          String             @id @default(cuid())
+  creatorId   String
+  igAccountId String
+  status      AnalyticsJobStatus @default(QUEUED)
+  attempts    Int                @default(0)
+  error       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([status])
+  @@index([creatorId])
+}
+
+enum AnalyticsJobStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}

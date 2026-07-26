@@ -1,21 +1,76 @@
-// Payouts are disabled in this repository/demo.
-//
-// Rationale: real payouts require the platform to be a registered business and
-// complete Razorpay KYC (beneficiary/fund account onboarding). For this college
-// project we intentionally disable the payout flow to avoid storing or
-// attempting live transfers. Keep this stub instead of deleting the file so
-// callers get a clear 501 response and the project history remains intact.
-
 import { NextResponse } from "next/server"
+import prisma from "@/clients/prisma"
+import {
+  RazorpayPayoutProvider,
+  ProviderNotOnboardedError,
+} from "@/clients/payoutProvider"
 
-export async function POST() {
-  return NextResponse.json(
-    {
-      error:
-        "Payouts are disabled in this demo/college project. The platform payout flow requires business KYC and is intentionally disabled.",
-    },
-    { status: 501 }
-  )
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+    const { collabId, fundAccountId, amountPaise } = body
+
+    if (!collabId) {
+      return NextResponse.json(
+        { error: "collabId is required" },
+        { status: 400 }
+      )
+    }
+
+    const provider = new RazorpayPayoutProvider()
+
+    // Create saga log before attempting payout
+    const saga = await prisma.sagaLog.create({
+      data: {
+        collabId,
+        sagaType: "PAYOUT",
+        step: "INITIATE",
+        status: "PENDING",
+      },
+    })
+
+    try {
+      const result = await provider.initiatePayout({
+        fundAccountId: fundAccountId ?? "",
+        amountPaise: amountPaise ?? 0,
+        collabId,
+      })
+
+      await prisma.sagaLog.update({
+        where: { id: saga.id },
+        data: { status: "SUCCEEDED", step: "PAYOUT_PROCESSED" },
+      })
+
+      return NextResponse.json({
+        success: true,
+        payoutId: result.payoutId,
+      })
+    } catch (err) {
+      // Compensating action: money was moved into creator.currentBalance when the
+      // collaboration was approved — a failed payout must NOT double-debit that balance.
+      // Nothing to reverse here since the payout hasn't touched the wallet yet; we only
+      // record the failure so the creator can retry once a real provider is onboarded.
+      await prisma.sagaLog.update({
+        where: { id: saga.id },
+        data: {
+          status: "FAILED",
+          error: err instanceof Error ? err.message : String(err),
+        },
+      })
+
+      if (err instanceof ProviderNotOnboardedError) {
+        return NextResponse.json({ error: err.message }, { status: 501 })
+      }
+
+      return NextResponse.json({ error: "Payout failed" }, { status: 500 })
+    }
+  } catch (err) {
+    console.error("[PAYOUT] Unexpected error:", err)
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
+  }
 }
 
 export async function GET() {

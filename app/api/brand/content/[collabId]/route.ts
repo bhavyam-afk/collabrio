@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth/next"
 import prisma from "@/clients/prisma"
 import { authOptions } from "../../../auth/authOptions"
 import { getPresignedUrl } from "@/clients/uploadToS3"
-import { TransactionStatus, TransactionType, WalletType, PaymentStatus } from "@prisma/client"
-import * as bcrypt from "bcryptjs"
+import { TransactionStatus, TransactionType, PaymentStatus, Prisma } from "@prisma/client"
+import { getOrCreatePlatformWallet } from "@/clients/platformWallet"
 
 export async function GET(
   req: NextRequest,
@@ -140,136 +140,141 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ colla
         return NextResponse.json({ error: "No content submitted for approval" }, { status: 400 })
       }
 
-      if (collaboration.content.contentStatus === "APPROVED") {
-        return NextResponse.json({ success: true, contentStatus: "APPROVED" })
-      }
-
-      const packagePrice = Number(collaboration.package?.price || 0)
-      const platformFeePercent = 0.1 // 10%
-      const platformFee = Math.round(packagePrice * platformFeePercent * 100) / 100
-      const creatorShare = packagePrice - platformFee
+      // Use Prisma.Decimal for precise fee calculation (no float drift)
+      const packagePrice = new Prisma.Decimal(collaboration.package?.price ?? 0)
+      const platformFee = packagePrice.mul("0.1").toDecimalPlaces(2)
+      const creatorShare = packagePrice.sub(platformFee)
 
       const creatorWallet = collaboration.creator?.user?.wallet
-      let platformWallet = await prisma.wallet.findFirst({
-        where: { walletType: WalletType.PLATFORM },
-      })
+      const platformWallet = await getOrCreatePlatformWallet()
 
       if (!creatorWallet) {
         return NextResponse.json({ error: "Creator wallet not found" }, { status: 400 })
       }
 
-      // Create platform wallet if it doesn't exist
-      if (!platformWallet) {
-        // Find or create platform system user
-        let platformUser = await prisma.user.findFirst({
-          where: { email: "platform@collabrio.local" },
-        })
+      // Create saga log BEFORE the transaction so a crash leaves a PENDING row
+      const saga = await prisma.sagaLog.create({
+        data: {
+          collabId,
+          sagaType: "APPROVE_COLLABORATION",
+          step: "LOCK_CONTENT",
+          status: "PENDING",
+        },
+      })
 
-        if (!platformUser) {
-          platformUser = await prisma.user.create({
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // Idempotency guard: only one caller can win this update.
+          // Moves the check INSIDE the transaction to fix the TOCTOU race.
+          const lock = await tx.packageCollaboration.updateMany({
+            where: { collabId, contentStatus: { not: "APPROVED" } },
             data: {
-              email: "platform@collabrio.local",
-              username: "collabrio_platform",
-              passwordHash: await bcrypt.hash("PlatformAdmin@2026", 10),
-              userType: "BRAND",
-              onboarding: "COMPLETE",
+              contentStatus: "APPROVED",
+              draftApprovedAt: new Date(),
+              PaymentStatus: PaymentStatus.CREATOR_PAID,
             },
           })
+
+          if (lock.count === 0) {
+            // Already approved by another concurrent request — no double payout
+            return { alreadyApproved: true }
+          }
+
+          // Update collaboration to completed
+          await tx.collaboration.update({
+            where: { id: collabId },
+            data: {
+              collabStatus: "COMPLETED",
+              PaymentStatus: PaymentStatus.CREATOR_PAID,
+            },
+          })
+
+          // Release escrow from platform pending balance
+          await tx.wallet.update({
+            where: { id: platformWallet.id },
+            data: {
+              pendingBalance: { decrement: packagePrice },
+            },
+          })
+
+          // Pay creator
+          await tx.wallet.update({
+            where: { id: creatorWallet.id },
+            data: {
+              currentBalance: { increment: creatorShare },
+              totalEarned: { increment: creatorShare },
+            },
+          })
+
+          // Platform earns fee
+          await tx.wallet.update({
+            where: { id: platformWallet.id },
+            data: {
+              currentBalance: { increment: platformFee },
+              totalEarned: { increment: platformFee },
+            },
+          })
+
+          // Create CREATOR_EARNING transaction (INWALLET status - already in wallet, not pending)
+          await tx.transaction.create({
+            data: {
+              type: TransactionType.CREATOR_EARNING,
+              status: TransactionStatus.INWALLET,
+              amount: creatorShare,
+              fromWalletId: platformWallet.id,
+              toWalletId: creatorWallet.id,
+              collabId,
+            },
+          })
+
+          // Create PLATFORM_FEE transaction (COMPLETED - fee is immediately earned)
+          await tx.transaction.create({
+            data: {
+              type: TransactionType.PLATFORM_FEE,
+              status: TransactionStatus.COMPLETED,
+              amount: platformFee,
+              fromWalletId: platformWallet.id,
+              toWalletId: platformWallet.id, // Fee stays in platform wallet
+              collabId,
+            },
+          })
+
+          // Mark saga as succeeded
+          await tx.sagaLog.update({
+            where: { id: saga.id },
+            data: { status: "SUCCEEDED", step: "RELEASE_ESCROW" },
+          })
+
+          return { alreadyApproved: false, creatorShare, platformFee }
+        })
+
+        if (result.alreadyApproved) {
+          // Mark saga — idempotent success, not a real operation
+          await prisma.sagaLog.update({
+            where: { id: saga.id },
+            data: { status: "SUCCEEDED", step: "ALREADY_APPROVED" },
+          })
+          return NextResponse.json({ success: true, contentStatus: "APPROVED" })
         }
 
-        platformWallet = await prisma.wallet.create({
+        return NextResponse.json({
+          success: true,
+          contentStatus: "APPROVED",
+          paymentReleased: true,
+          creatorEarnings: result.creatorShare!.toNumber(),
+          platformFee: result.platformFee!.toNumber(),
+        })
+      } catch (err) {
+        // Transaction failed — mark saga as FAILED for investigation
+        await prisma.sagaLog.update({
+          where: { id: saga.id },
           data: {
-            userId: platformUser.id,
-            walletType: WalletType.PLATFORM,
-            currentBalance: 0,
-            pendingBalance: 0,
-            totalEarned: 0,
-            totalSpent: 0,
+            status: "FAILED",
+            error: err instanceof Error ? err.message : String(err),
           },
         })
+        throw err // re-throw to hit the outer catch
       }
-
-      // Transaction: release escrow and distribute earnings
-      const updated = await prisma.$transaction(async (tx) => {
-        // Update content to approved
-        const contentUpdate = await tx.packageCollaboration.update({
-          where: { collabId },
-          data: {
-            contentStatus: "APPROVED",
-            draftApprovedAt: new Date(),
-            PaymentStatus: PaymentStatus.CREATOR_PAID,
-          },
-        })
-
-        // Update collaboration to completed
-        await tx.collaboration.update({
-          where: { id: collabId },
-          data: {
-            collabStatus: "COMPLETED",
-            PaymentStatus: PaymentStatus.CREATOR_PAID,
-          },
-        })
-
-        // Release escrow from platform pending balance
-        await tx.wallet.update({
-          where: { id: platformWallet.id },
-          data: {
-            pendingBalance: { decrement: packagePrice },
-          },
-        })
-
-        // Pay creator
-        await tx.wallet.update({
-          where: { id: creatorWallet.id },
-          data: {
-            currentBalance: { increment: creatorShare },
-            totalEarned: { increment: creatorShare },
-          },
-        })
-
-        // Platform earns fee
-        await tx.wallet.update({
-          where: { id: platformWallet.id },
-          data: {
-            currentBalance: { increment: platformFee },
-            totalEarned: { increment: platformFee },
-          },
-        })
-
-        // Create CREATOR_EARNING transaction (INWALLET status - already in wallet, not pending)
-        await tx.transaction.create({
-          data: {
-            type: TransactionType.CREATOR_EARNING,
-            status: TransactionStatus.INWALLET,
-            amount: creatorShare,
-            fromWalletId: platformWallet.id,
-            toWalletId: creatorWallet.id,
-            collabId,
-          },
-        })
-
-        // Create PLATFORM_FEE transaction (COMPLETED - fee is immediately earned)
-        await tx.transaction.create({
-          data: {
-            type: TransactionType.PLATFORM_FEE,
-            status: TransactionStatus.COMPLETED,
-            amount: platformFee,
-            fromWalletId: platformWallet.id,
-            toWalletId: platformWallet.id, // Fee stays in platform wallet
-            collabId,
-          },
-        })
-
-        return contentUpdate
-      })
-
-      return NextResponse.json({
-        success: true,
-        contentStatus: updated.contentStatus,
-        paymentReleased: true,
-        creatorEarnings: creatorShare,
-        platformFee,
-      })
     }
 
     // ─── REQUEST IMPROVEMENT: Keep in escrow, don't update PaymentStatus ────

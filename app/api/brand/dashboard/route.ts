@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import prisma from "../../../../clients/prisma"
 import { authOptions } from "../../auth/authOptions"
 import type { CollabStatus } from "@prisma/client"
-import { PaymentStatus, WalletType, TransactionType, TransactionStatus } from "@prisma/client"
+import { PaymentStatus, WalletType, TransactionType, TransactionStatus, Prisma } from "@prisma/client"
 
 const CANCELLED_STATUS = "CANCELLED" as CollabStatus
 
@@ -212,78 +212,126 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Wallet configuration error" }, { status: 500 })
       }
 
-      const refundAmount = Number(current.package?.price || 0)
+      // Use Prisma.Decimal for precise money math (no float drift)
+      const refundAmount = new Prisma.Decimal(current.package?.price ?? 0)
       const draftSubmitted = current.content?.contentStatus === "SUBMITTED" || current.content?.contentStatus === "IMPROVEMENT_REQUESTED"
-      const creatorCompensation = draftSubmitted ? Math.round(refundAmount * 0.5 * 100) / 100 : 0
-      const brandRefund = Math.round((refundAmount - creatorCompensation) * 100) / 100
+      const creatorCompensation = draftSubmitted
+        ? refundAmount.mul("0.5").toDecimalPlaces(2)
+        : new Prisma.Decimal(0)
+      const brandRefund = refundAmount.sub(creatorCompensation)
 
-      // Process refund in transaction
-      await prisma.$transaction(async (tx) => {
-        // Update collaboration and content status
-        await tx.collaboration.update({
-          where: { id: collabId },
-          data: {
-            collabStatus: CANCELLED_STATUS,
-            PaymentStatus: PaymentStatus.REFUNDED,
-          },
-        })
+      // Create saga log BEFORE the transaction
+      const saga = await prisma.sagaLog.create({
+        data: {
+          collabId,
+          sagaType: "CANCEL_COLLABORATION",
+          step: "INITIATE_CANCEL",
+          status: "PENDING",
+        },
+      })
 
-        await tx.packageCollaboration.update({
-          where: { collabId },
-          data: {
-            PaymentStatus: PaymentStatus.REFUNDED,
-          },
-        })
-
-        // Release escrow
-        await tx.wallet.update({
-          where: { id: platformWallet.id },
-          data: {
-            pendingBalance: { decrement: refundAmount },
-          },
-        })
-
-        // Credit brand wallet with the refund amount
-        await tx.wallet.update({
-          where: { id: brandWallet.id },
-          data: {
-            currentBalance: { increment: brandRefund },
-          },
-        })
-
-        if (draftSubmitted && creatorCompensation > 0 && creatorWallet) {
-          await tx.wallet.update({
-            where: { id: creatorWallet.id },
+      try {
+        // Process refund in transaction
+        const lockCount = await prisma.$transaction(async (tx) => {
+          // Idempotency guard: only one caller can flip ACTIVE → CANCELLED
+          const lock = await tx.collaboration.updateMany({
+            where: { id: collabId, collabStatus: "ACTIVE" },
             data: {
-              currentBalance: { increment: creatorCompensation },
-              totalEarned: { increment: creatorCompensation },
+              collabStatus: CANCELLED_STATUS,
+              PaymentStatus: PaymentStatus.REFUNDED,
             },
           })
 
+          if (lock.count === 0) {
+            // Another concurrent cancel already won — no double refund
+            return lock.count
+          }
+
+          await tx.packageCollaboration.update({
+            where: { collabId },
+            data: {
+              PaymentStatus: PaymentStatus.REFUNDED,
+            },
+          })
+
+          // Release escrow
+          await tx.wallet.update({
+            where: { id: platformWallet.id },
+            data: {
+              pendingBalance: { decrement: refundAmount },
+            },
+          })
+
+          // Credit brand wallet with the refund amount + fix totalSpent decrement
+          await tx.wallet.update({
+            where: { id: brandWallet.id },
+            data: {
+              currentBalance: { increment: brandRefund },
+              totalSpent: { decrement: brandRefund },
+            },
+          })
+
+          if (draftSubmitted && creatorCompensation.gt(0) && creatorWallet) {
+            await tx.wallet.update({
+              where: { id: creatorWallet.id },
+              data: {
+                currentBalance: { increment: creatorCompensation },
+                totalEarned: { increment: creatorCompensation },
+              },
+            })
+
+            await tx.transaction.create({
+              data: {
+                type: TransactionType.CREATOR_EARNING,
+                status: TransactionStatus.INWALLET,
+                amount: creatorCompensation,
+                fromWalletId: platformWallet.id,
+                toWalletId: creatorWallet.id,
+                collabId,
+              },
+            })
+          }
+
+          // Create refund transaction
           await tx.transaction.create({
             data: {
-              type: TransactionType.CREATOR_EARNING,
-              status: TransactionStatus.INWALLET,
-              amount: creatorCompensation,
+              type: TransactionType.REFUND,
+              status: TransactionStatus.COMPLETED,
+              amount: brandRefund,
               fromWalletId: platformWallet.id,
-              toWalletId: creatorWallet.id,
+              toWalletId: brandWallet.id,
               collabId,
             },
           })
-        }
 
-        // Create refund transaction
-        await tx.transaction.create({
+          // Mark saga succeeded
+          await tx.sagaLog.update({
+            where: { id: saga.id },
+            data: { status: "SUCCEEDED", step: "REFUND_COMPLETED" },
+          })
+          
+          return lock.count
+        })
+        
+        if (lockCount === 0) {
+          // Mark saga — idempotent success, not a real operation
+          await prisma.sagaLog.update({
+            where: { id: saga.id },
+            data: { status: "SUCCEEDED", step: "ALREADY_CANCELLED" },
+          })
+          // Fall through to return updated collaboration
+        }
+      } catch (err) {
+        // Transaction failed — mark saga as FAILED
+        await prisma.sagaLog.update({
+          where: { id: saga.id },
           data: {
-            type: TransactionType.REFUND,
-            status: TransactionStatus.COMPLETED,
-            amount: brandRefund,
-            fromWalletId: platformWallet.id,
-            toWalletId: brandWallet.id,
-            collabId,
+            status: "FAILED",
+            error: err instanceof Error ? err.message : String(err),
           },
         })
-      })
+        throw err
+      }
 
       const updated = await prisma.collaboration.findUnique({
         where: { id: collabId },
@@ -296,7 +344,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({
         collaboration: serializeCollaboration(updated!),
         refundProcessed: true,
-        refundAmount,
+        refundAmount: refundAmount.toNumber(),
       })
     }
   }
